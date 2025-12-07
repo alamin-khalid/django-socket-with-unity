@@ -18,6 +18,7 @@ from django.contrib import admin
 from django.urls import path, include
 from game_manager.views import DashboardView
 
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('game_manager.urls')),

@@ -3,3 +3,4 @@ channels[daphne]>=4.0
 channels-redis>=4.0
 celery>=5.3
 redis>=5.0
+djangorestframework>=3.14

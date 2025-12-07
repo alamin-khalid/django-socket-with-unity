@@ -90,10 +90,23 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
 
 CELERY_BEAT_SCHEDULE = {
-    'process-map-queue-every-5-seconds': {
-        'task': 'game_manager.tasks.process_map_queue',
-        'schedule': 5.0,
+    'process-due-maps': {
+        'task': 'game_manager.tasks.process_due_maps',
+        'schedule': 5.0,  # Every 5 seconds
     },
+    'check-server-health': {
+        'task': 'game_manager.tasks.check_server_health',
+        'schedule': 30.0,  # Every 30 seconds
+    },
+}
+
+REST_FRAMEWORK = {
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+    ],
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
+    ],
 }
 
 
