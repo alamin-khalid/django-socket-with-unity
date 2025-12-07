@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Server Dashboard</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        h1, h2 { color: #333; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .status-online { color: green; font-weight: bold; }
+        .status-offline { color: red; }
+        .status-busy { color: orange; font-weight: bold; }
+        button { padding: 5px 10px; cursor: pointer; }
+        .btn-restart { background-color: #f44336; color: white; border: none; }
+        .btn-cancel { background-color: #ff9800; color: white; border: none; }
+    </style>
+</head>
+<body>
+    <h1>Server Orchestrator Dashboard</h1>
+
+    <h2>Game Servers</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Server ID</th>
+                <th>Status</th>
+                <th>Last Heartbeat</th>
+                <th>Current Task</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for server in servers %}
+            <tr>
+                <td>{{ server.server_id }}</td>
+                <td class="status-{{ server.status }}">{{ server.status|title }}</td>
+                <td>{{ server.last_heartbeat|default:"-" }}</td>
+                <td>
+                    {% if server.current_task %}
+                        Map {{ server.current_task.map_id }}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td>
+                    <button class="btn-restart" onclick="sendCommand('{{ server.server_id }}', 'restart_server')">Restart</button>
+                    {% if server.status == 'busy' %}
+                    <button class="btn-cancel" onclick="sendCommand('{{ server.server_id }}', 'stop_game')">Cancel Task</button>
+                    {% endif %}
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5">No servers connected.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h2>Map Queue / Active Tasks</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Map ID</th>
+                <th>Status</th>
+                <th>Next Round Time</th>
+                <th>Season/Round</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for map in maps %}
+            <tr>
+                <td>{{ map.map_id }}</td>
+                <td>{{ map.status|title }}</td>
+                <td>{{ map.next_round_time }}</td>
+                <td>S{{ map.season_id }} / R{{ map.round_id }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4">No active maps.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <script>
+        function sendCommand(serverId, action) {
+            if (!confirm(`Are you sure you want to ${action} on ${serverId}?`)) return;
+
+            fetch('/api/command/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({
+                    serverId: serverId,
+                    action: action
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    alert('Command sent successfully');
+                    location.reload();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to send command');
+            });
+        }
+        
+        // Auto-refresh every 5 seconds
+        setTimeout(() => location.reload(), 5000);
+    </script>
+</body>
+</html>
