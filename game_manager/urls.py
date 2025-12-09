@@ -9,7 +9,4 @@ urlpatterns = [
     path('server/<str:server_id>/', views.server_detail, name='server_detail'),
     path('queue/', views.queue_status, name='queue_status'),
     path('command/', views.send_server_command, name='send_command'),
-    
-    # Dashboard
-    path('dashboard/', views.DashboardView.as_view(), name='dashboard'),
 ]
