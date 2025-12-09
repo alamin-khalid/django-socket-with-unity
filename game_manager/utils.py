@@ -21,7 +21,7 @@ def send_command_to_server(server_id, action, payload=None):
     async_to_sync(channel_layer.group_send)(
         group_name,
         {
-            "type": "server_command",
+            "type": "send_command",  # Must match consumer method name
             "command": command_data
         }
     )

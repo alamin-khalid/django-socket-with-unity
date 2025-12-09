@@ -4,8 +4,8 @@ from rest_framework import status
 from django.utils import timezone
 from django.shortcuts import render
 from django.views import View
-from .models import MapPlanet, TaskHistory, GameServer
-from .serializers import MapPlanetSerializer, GameServerSerializer
+from .models import Planet, TaskHistory, UnityServer
+from .serializers import PlanetSerializer, UnityServerSerializer
 from .redis_queue import get_queue_size, peek_next_due_time
 from .utils import send_command_to_server
 
@@ -20,10 +20,10 @@ def get_map_data(request, map_id):
     Returns map configuration for processing.
     """
     try:
-        map_planet = MapPlanet.objects.get(map_id=map_id)
-        serializer = MapPlanetSerializer(map_planet)
+        map_planet = Planet.objects.get(map_id=map_id)
+        serializer = PlanetSerializer(map_planet)
         return Response(serializer.data)
-    except MapPlanet.DoesNotExist:
+    except Planet.DoesNotExist:
         return Response({'error': 'Map not found'}, status=status.HTTP_404_NOT_FOUND)
 
 @api_view(['POST'])
@@ -67,8 +67,8 @@ def list_servers(request):
     GET /api/servers/
     Returns all server statuses with metrics.
     """
-    servers = GameServer.objects.all().order_by('server_id')
-    serializer = GameServerSerializer(servers, many=True)
+    servers = UnityServer.objects.all().order_by('server_id')
+    serializer = UnityServerSerializer(servers, many=True)
     return Response(serializer.data)
 
 @api_view(['GET'])
@@ -82,11 +82,11 @@ def queue_status(request):
     return Response({
         'queue_size': get_queue_size(),
         'next_due_time': next_due.isoformat() if next_due else None,
-        'idle_servers': GameServer.objects.filter(status='idle').count(),
-        'busy_servers': GameServer.objects.filter(status='busy').count(),
-        'offline_servers': GameServer.objects.filter(status='offline').count(),
-        'queued_maps': MapPlanet.objects.filter(status='queued').count(),
-        'processing_maps': MapPlanet.objects.filter(status='processing').count(),
+        'idle_servers': UnityServer.objects.filter(status='idle').count(),
+        'busy_servers': UnityServer.objects.filter(status='busy').count(),
+        'offline_servers': UnityServer.objects.filter(status='offline').count(),
+        'queued_maps': Planet.objects.filter(status='queued').count(),
+        'processing_maps': Planet.objects.filter(status='processing').count(),
     })
 
 @api_view(['GET'])
@@ -96,10 +96,10 @@ def server_detail(request, server_id):
     Returns detailed information about a specific server.
     """
     try:
-        server = GameServer.objects.get(server_id=server_id)
-        serializer = GameServerSerializer(server)
+        server = UnityServer.objects.get(server_id=server_id)
+        serializer = UnityServerSerializer(server)
         return Response(serializer.data)
-    except GameServer.DoesNotExist:
+    except UnityServer.DoesNotExist:
         return Response({'error': 'Server not found'}, status=status.HTTP_404_NOT_FOUND)
 
 # ============================================================================
@@ -111,8 +111,8 @@ class DashboardView(View):
     Admin dashboard showing server status and map queue.
     """
     def get(self, request):
-        servers = GameServer.objects.all().order_by('server_id')
-        maps = MapPlanet.objects.exclude(status='completed').order_by('next_round_time')[:20]
+        servers = UnityServer.objects.all().order_by('server_id')
+        maps = Planet.objects.exclude(status='completed').order_by('next_round_time')[:20]
         
         context = {
             'servers': servers,

@@ -1,40 +1,38 @@
 from rest_framework import serializers
-from .models import MapPlanet, TaskHistory, GameServer
+from .models import Planet, TaskHistory, UnityServer
 
-class MapPlanetSerializer(serializers.ModelSerializer):
+class PlanetSerializer(serializers.ModelSerializer):
     processing_server_id = serializers.CharField(source='processing_server.server_id', read_only=True, allow_null=True)
     
     class Meta:
-        model = MapPlanet
+        model = Planet
         fields = [
-            'map_id', 
-            'name',
+            'map_id',
             'season_id', 
-            'round_id', 
+            'round_id',
+            'current_round_number', 
             'next_round_time',
             'status',
-            'map_data',
             'last_processed',
             'processing_server_id',
         ]
 
-class GameServerSerializer(serializers.ModelSerializer):
+class UnityServerSerializer(serializers.ModelSerializer):
     current_task_id = serializers.CharField(source='current_task.map_id', read_only=True, allow_null=True)
     uptime_seconds = serializers.SerializerMethodField()
     
     class Meta:
-        model = GameServer
+        model = UnityServer
         fields = [
             'id',
             'server_id',
-            'name',
             'status',
             'last_heartbeat',
             'cpu_usage',
-            'player_count',
+            'ram_usage',
             'current_task_id',
             'connected_at',
-            'total_jobs_completed',
+            'total_completed_map',
             'uptime_seconds',
         ]
     

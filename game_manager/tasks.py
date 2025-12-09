@@ -2,7 +2,7 @@ from celery import shared_task
 from celery.utils.log import get_task_logger
 from django.utils import timezone
 from datetime import timedelta, datetime
-from .models import GameServer, MapPlanet, TaskHistory
+from .models import UnityServer, Planet, TaskHistory
 from .redis_queue import get_due_maps, remove_from_queue, add_map_to_queue
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
@@ -24,7 +24,7 @@ def process_due_maps():
     logger.info(f"Found {len(due_map_ids)} due maps: {due_map_ids}")
     
     # Get idle servers ordered by total jobs completed (load balancing)
-    idle_servers = list(GameServer.objects.filter(status='idle').order_by('total_jobs_completed'))
+    idle_servers = list(UnityServer.objects.filter(status='idle').order_by('total_completed_map'))
     
     if not idle_servers:
         logger.warning(f"No idle servers available for {len(due_map_ids)} due maps")
@@ -39,7 +39,7 @@ def process_due_maps():
             
         try:
             # Get map object - must be in 'queued' status
-            map_obj = MapPlanet.objects.get(map_id=map_id, status='queued')
+            map_obj = Planet.objects.get(map_id=map_id, status='queued')
             
             # Get next idle server
             server = idle_servers.pop(0)
@@ -53,7 +53,7 @@ def process_due_maps():
             assigned_count += 1
             logger.info(f"Assigned map {map_id} to server {server.server_id}")
                 
-        except MapPlanet.DoesNotExist:
+        except Planet.DoesNotExist:
             # Map was deleted or already processing
             logger.warning(f"Map {map_id} not found or not queued, removing from queue")
             remove_from_queue(map_id)
@@ -71,11 +71,11 @@ def assign_job_to_server(map_id: str, server_id: int):
     
     Args:
         map_id: Map identifier (string)
-        server_id: GameServer database ID (integer)
+        server_id: UnityServer database ID (integer)
     """
     try:
-        map_obj = MapPlanet.objects.get(map_id=map_id)
-        server = GameServer.objects.get(id=server_id)
+        map_obj = Planet.objects.get(map_id=map_id)
+        server = UnityServer.objects.get(id=server_id)
         
         logger.info(f"Assigning map {map_id} to server {server.server_id}")
         
@@ -103,7 +103,6 @@ def assign_job_to_server(map_id: str, server_id: int):
             {
                 'type': 'job_assignment',
                 'map_id': map_obj.map_id,
-                'map_data': map_obj.map_data,
                 'round_id': map_obj.round_id,
                 'season_id': map_obj.season_id,
             }
@@ -112,10 +111,10 @@ def assign_job_to_server(map_id: str, server_id: int):
         logger.info(f"Job assigned: {map_id} → {server.server_id}")
         return True
         
-    except MapPlanet.DoesNotExist:
+    except Planet.DoesNotExist:
         logger.error(f"Map {map_id} not found")
         return False
-    except GameServer.DoesNotExist:
+    except UnityServer.DoesNotExist:
         logger.error(f"Server with ID {server_id} not found")
         return False
     except Exception as e:
@@ -137,8 +136,8 @@ def handle_job_completion(map_id: str, server_id: str, result_data: dict, next_t
         next_time_seconds: Seconds until next round
     """
     try:
-        map_obj = MapPlanet.objects.get(map_id=map_id)
-        server = GameServer.objects.get(server_id=server_id)
+        map_obj = Planet.objects.get(map_id=map_id)
+        server = UnityServer.objects.get(server_id=server_id)
         
         logger.info(f"Processing job completion: {map_id} from {server_id}")
         
@@ -156,7 +155,7 @@ def handle_job_completion(map_id: str, server_id: str, result_data: dict, next_t
         # Free server
         server.status = 'idle'
         server.current_task = None
-        server.total_jobs_completed += 1
+        server.total_completed_map += 1
         server.save()
         
         # Update task history
@@ -181,10 +180,10 @@ def handle_job_completion(map_id: str, server_id: str, result_data: dict, next_t
         logger.info(f"Map {map_id} completed, round {map_obj.round_id}, next at {next_round_time}")
         return f"Map {map_id} completed and requeued for {next_round_time}"
         
-    except MapPlanet.DoesNotExist:
+    except Planet.DoesNotExist:
         logger.error(f"Map {map_id} not found during completion")
         return False
-    except GameServer.DoesNotExist:
+    except UnityServer.DoesNotExist:
         logger.error(f"Server {server_id} not found during completion")
         return False
     except Exception as e:
@@ -200,7 +199,7 @@ def check_server_health():
     threshold = timezone.now() - timedelta(seconds=30)
     
     # Find stale servers (idle or busy but no recent heartbeat)
-    stale_servers = GameServer.objects.filter(
+    stale_servers = UnityServer.objects.filter(
         status__in=['idle', 'busy'],
         last_heartbeat__lt=threshold
     )
@@ -259,8 +258,8 @@ def handle_job_error(map_id: str, server_id: str, error_message: str):
         error_message: Error description
     """
     try:
-        map_obj = MapPlanet.objects.get(map_id=map_id)
-        server = GameServer.objects.get(server_id=server_id)
+        map_obj = Planet.objects.get(map_id=map_id)
+        server = UnityServer.objects.get(server_id=server_id)
         
         logger.error(f"Job error: {map_id} on {server_id}: {error_message}")
         

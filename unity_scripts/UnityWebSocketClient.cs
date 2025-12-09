@@ -1,294 +1,358 @@
 using UnityEngine;
 using WebSocketSharp;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Collections;
 using UnityEngine.Networking;
-using System.Text;
+using System;
+using System.Net;
 
 public class UnityWebSocketClient : MonoBehaviour
 {
-    [Header("Connection Settings")]
-    public string backendWsUrl = "ws://localhost:8000/ws/server/";
-    public string backendApiUrl = "http://localhost:8000";
-    public string serverId = "unity_server_01";
-    
-    [Header("Heartbeat Settings")]
-    public float heartbeatInterval = 5f;
-    
+    [Header("Backend Configuration")] public string backendWsUrl = "ws://127.0.0.1:8000/ws/server/";
+    public string backendApiUrl = "http://127.0.0.1:8000";
+
+    [Header("Server Identity")] public string serverId = ""; // Will auto-generate from public IP
+
     private WebSocket ws;
+    private string publicIP = "";
     private bool isProcessing = false;
 
-    void Start()
+    private void Start()
     {
-        ConnectToBackend();
-        StartCoroutine(SendHeartbeatRoutine());
+        StartCoroutine(InitializeAndConnect());
     }
 
-    void ConnectToBackend()
+    private IEnumerator InitializeAndConnect()
     {
-        string url = backendWsUrl + serverId + "/";
-        ws = new WebSocket(url);
+        // 1. Get public IP first
+        yield return StartCoroutine(GetPublicIP());
 
-        ws.OnOpen += (sender, e) =>
+        // 2. Set serverId if not manually configured
+        if (string.IsNullOrEmpty(serverId))
         {
-            Debug.Log($"[WebSocket] Connected to {url}");
-            SendStatusUpdate("idle");
-        };
+            serverId = $"unity_{publicIP.Replace(".", "_")}";
+        }
+
+        Debug.Log($"[Init] Server ID: {serverId}, Public IP: {publicIP}");
+
+        // 3. Connect to WebSocket
+        Connect();
+
+        // 4. Start heartbeat
+        StartCoroutine(SendHeartbeat());
+    }
+
+    // ================================================================
+    // GET PUBLIC IP
+    // ================================================================
+
+    private IEnumerator GetPublicIP()
+    {
+        Debug.Log("[IP] Fetching public IP...");
+
+        // Try primary service
+        UnityWebRequest request = UnityWebRequest.Get("https://api.ipify.org?format=text");
+        yield return request.SendWebRequest();
+
+        if (request.result == UnityWebRequest.Result.Success)
+        {
+            publicIP = request.downloadHandler.text.Trim();
+            Debug.Log($"[IP] Public IP detected: {publicIP}");
+        }
+        else
+        {
+            Debug.LogWarning($"[IP] Primary service failed: {request.error}");
+
+            // Fallback to secondary service
+            request = UnityWebRequest.Get("https://checkip.amazonaws.com");
+            yield return request.SendWebRequest();
+
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                publicIP = request.downloadHandler.text.Trim();
+                Debug.Log($"[IP] Public IP detected (fallback): {publicIP}");
+            }
+            else
+            {
+                Debug.LogError($"[IP] Failed to get public IP: {request.error}");
+                publicIP = "unknown";
+            }
+        }
+    }
+
+    // ================================================================
+    // WEBSOCKET CONNECTION
+    // ================================================================
+
+    void Connect()
+    {
+        string wsUrl = $"{backendWsUrl}{serverId}/";
+        Debug.Log($"[WebSocket] Connecting to {wsUrl}...");
+
+        ws = new WebSocket(wsUrl);
+
+        ws.OnOpen += (sender, e) => { Debug.Log($"[WebSocket] ✅ Connected as {serverId}"); };
 
         ws.OnMessage += (sender, e) =>
         {
-            Debug.Log($"[WebSocket] Message Received: {e.Data}");
+            Debug.Log($"[WebSocket] ⬇ Received: {e.Data}");
             HandleMessage(e.Data);
         };
 
+        ws.OnError += (sender, e) => { Debug.LogError($"[WebSocket] ❌ Error: {e.Message}"); };
+
         ws.OnClose += (sender, e) =>
         {
-            Debug.LogWarning($"[WebSocket] Closed: {e.Reason}");
-            // Auto-reconnect after 5 seconds
-            Invoke("ConnectToBackend", 5f);
-        };
+            Debug.LogWarning($"[WebSocket] Disconnected. Code: {e.Code}, Reason: {e.Reason}");
 
-        ws.OnError += (sender, e) =>
-        {
-            Debug.LogError($"[WebSocket] Error: {e.Message}");
+            // Auto-reconnect after 5 seconds
+            Invoke(nameof(Connect), 5f);
         };
 
         ws.Connect();
     }
 
-    void HandleMessage(string jsonMessage)
+    // ================================================================
+    // MESSAGE HANDLING (Django → Unity)
+    // ================================================================
+
+    void HandleMessage(string message)
     {
         try
         {
-            var data = JObject.Parse(jsonMessage);
-            string type = (string)data["type"];
+            JObject data = JObject.Parse(message);
+            string messageType = data["type"]?.ToString();
 
-            if (type == "assign_job")
+            switch (messageType)
             {
-                // New job assignment from Django
-                string mapId = (string)data["map_id"];
-                int roundId = (int)data["round_id"];
-                int seasonId = (int)data["season_id"];
-                JObject mapData = (JObject)data["map_data"];
-                
-                Debug.Log($"[Job] Assigned: Map {mapId}, Round {roundId}, Season {seasonId}");
-                StartCoroutine(ProcessMapJob(mapId, roundId, seasonId, mapData));
-            }
-            else if (type == "command")
-            {
-                // Manual command from dashboard
-                string action = (string)data["action"];
-                Debug.Log($"[Command] Received: {action}");
-                HandleCommand(action, data);
-            }
-            else
-            {
-                Debug.LogWarning($"[WebSocket] Unknown message type: {type}");
+                case "assign_job":
+                    OnJobAssignment(data);
+                    break;
+
+                case "command":
+                    OnCommand(data);
+                    break;
+
+                default:
+                    Debug.LogWarning($"[WebSocket] Unknown message type: {messageType}");
+                    break;
             }
         }
-        catch (System.Exception ex)
+        catch (Exception ex)
         {
-            Debug.LogError($"[WebSocket] Error parsing message: {ex.Message}");
+            Debug.LogError($"[WebSocket] Failed to parse message: {ex.Message}");
         }
     }
 
-    IEnumerator ProcessMapJob(string mapId, int roundId, int seasonId, JObject mapData)
+    void OnJobAssignment(JObject data)
     {
         if (isProcessing)
         {
-            Debug.LogWarning("[Job] Already processing a job, rejecting new assignment");
-            yield break;
+            Debug.LogWarning("[Job] Already processing, ignoring new assignment");
+            return;
         }
 
-        isProcessing = true;
+        string mapId = data["map_id"]?.ToString();
+        int roundId = data["round_id"]?.ToObject<int>() ?? 0;
+        int seasonId = data["season_id"]?.ToObject<int>() ?? 1;
+
+        Debug.Log($"[Job] 📋 Assigned: Map {mapId}, Season {seasonId}, Round {roundId}");
+
+        // Update status to busy
         SendStatusUpdate("busy");
 
-        Debug.Log($"[Job] Starting processing for map {mapId}");
-
-        // 1. Fetch full map data from API (optional, already have basic data)
-        string apiUrl = $"{backendApiUrl}/api/map/{mapId}/";
-        using (UnityWebRequest webRequest = UnityWebRequest.Get(apiUrl))
-        {
-            yield return webRequest.SendWebRequest();
-
-            if (webRequest.result != UnityWebRequest.Result.Success)
-            {
-                Debug.LogError($"[Job] Error fetching map data: {webRequest.error}");
-                SendError(mapId, $"Failed to fetch map data: {webRequest.error}");
-                isProcessing = false;
-                SendStatusUpdate("idle");
-                yield break;
-            }
-            
-            Debug.Log($"[Job] Map Data Retrieved: {webRequest.downloadHandler.text}");
-            // You can parse additional data here if needed
-        }
-
-        // 2. PROCESS MAP - THIS IS WHERE YOUR GAME LOGIC GOES
-        Debug.Log($"[Job] Processing map {mapId} with data: {mapData}");
-        
-        // Simulate calculation (replace with your actual processing)
-        yield return new WaitForSeconds(3f);
-        
-        // 3. Create result data
-        var resultData = new JObject
-        {
-            ["success"] = true,
-            ["calculations_completed"] = 100,
-            ["timestamp"] = System.DateTime.UtcNow.ToString("o"),
-            // Add your actual calculation results here
-        };
-        
-        // 4. Calculate next round time (e.g., 60 seconds from now)
-        int nextTimeSeconds = 60; // Adjust based on your game logic
-        
-        // 5. Submit results to API
-        yield return SubmitResults(mapId, seasonId, roundId + 1, resultData, nextTimeSeconds);
-        
-        // 6. Notify WebSocket of completion
-        SendJobDone(mapId, resultData, nextTimeSeconds);
-        
-        // 7. Back to idle
-        isProcessing = false;
-        SendStatusUpdate("idle");
-        
-        Debug.Log($"[Job] Completed: {mapId}");
+        // Start processing
+        StartCoroutine(ProcessMapJob(mapId, seasonId, roundId));
     }
 
-    IEnumerator SubmitResults(string mapId, int seasonId, int roundId, JObject result, int nextTime)
+    void OnCommand(JObject data)
+    {
+        string command = data["command"]?.ToString();
+        Debug.Log($"[Command] Received: {command}");
+
+        // Handle commands like restart_server, stop_server, etc.
+        switch (command)
+        {
+            case "restart_server":
+                Debug.Log("[Command] Restarting server...");
+                // Implement restart logic
+                break;
+
+            case "stop_server":
+                Debug.Log("[Command] Stopping server...");
+                Application.Quit();
+                break;
+        }
+    }
+
+    // ================================================================
+    // JOB PROCESSING WORKFLOW
+    // ================================================================
+
+    IEnumerator ProcessMapJob(string mapId, int seasonId, int roundId)
+    {
+        isProcessing = true;
+
+        Debug.Log($"[Job] 🔄 Starting processing for {mapId}");
+
+        // 1. FETCH MAP DATA FROM API
+
+
+        // 2. SUBMIT RESULTS TO API
+        yield return StartCoroutine(SubmitResults(mapId, null, 0));
+
+        // 3. NOTIFY WEBSOCKET WE'RE DONE
+        SendJobDone(mapId, null, 0);
+
+        // 4. BACK TO IDLE
+        SendStatusUpdate("idle");
+        isProcessing = false;
+
+        Debug.Log($"[Job] ✅ Completed {mapId}");
+    }
+
+    // ================================================================
+    // API CALLS
+    // ================================================================
+
+    public IEnumerator SubmitResults(string mapId, JObject result, int nextTimeSeconds)
     {
         string apiUrl = $"{backendApiUrl}/api/result/";
-        
-        var payload = new JObject
+
+        JObject payload = new JObject
         {
             ["map_id"] = mapId,
             ["server_id"] = serverId,
             ["result"] = result,
-            ["next_time"] = nextTime
+            ["next_time"] = nextTimeSeconds
         };
-        
-        Debug.Log($"[API] Submitting results: {payload}");
-        
-        var request = new UnityWebRequest(apiUrl, "POST");
-        byte[] bodyRaw = Encoding.UTF8.GetBytes(payload.ToString());
+
+        Debug.Log($"[API] Submitting results to {apiUrl}");
+
+        UnityWebRequest request = new UnityWebRequest(apiUrl, "POST");
+        byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(payload.ToString());
         request.uploadHandler = new UploadHandlerRaw(bodyRaw);
         request.downloadHandler = new DownloadHandlerBuffer();
         request.SetRequestHeader("Content-Type", "application/json");
-        
+
         yield return request.SendWebRequest();
-        
+
         if (request.result != UnityWebRequest.Result.Success)
         {
-            Debug.LogError($"[API] Failed to submit results: {request.error}");
+            Debug.LogError($"[API] ❌ Failed to submit results: {request.error}");
         }
         else
         {
-            Debug.Log($"[API] Results submitted successfully");
+            Debug.Log($"[API] ✅ Results submitted successfully");
         }
     }
 
-    IEnumerator SendHeartbeatRoutine()
+    // ================================================================
+    // WEBSOCKET MESSAGES (Unity → Django)
+    // ================================================================
+
+    IEnumerator SendHeartbeat()
     {
         while (true)
         {
-            yield return new WaitForSeconds(heartbeatInterval);
-            
+            if (isProcessing)
+            {
+                // Wait until isProcessing becomes false
+                yield return new WaitWhile(() => isProcessing);
+            }
+            else
+            {
+                yield return new WaitForSeconds(5f);
+            }
+
+
             if (ws != null && ws.IsAlive)
             {
-                var payload = new JObject
+                float cpuUsage = UnityEngine.Random.Range(30f, 60f); // Mock CPU usage
+
+                JObject message = new JObject
                 {
                     ["type"] = "heartbeat",
-                    ["cpu"] = Random.Range(10f, 80f), // Replace with actual CPU usage
-                    ["players"] = 0 // Replace with actual player count
+                    ["cpu"] = cpuUsage,
+                    ["players"] = 0
                 };
-                
-                ws.Send(payload.ToString());
-                // Don't log every heartbeat to avoid spam
+
+                ws.Send(message.ToString());
+                // Debug.Log($"[Heartbeat] Sent: CPU {cpuUsage:F1}%");
             }
         }
     }
 
     void SendStatusUpdate(string status)
     {
-        if (ws != null && ws.IsAlive)
+        if (ws == null || !ws.IsAlive) return;
+
+        JObject message = new JObject
         {
-            var message = new JObject
-            {
-                ["type"] = "status_update",
-                ["status"] = status
-            };
-            
-            ws.Send(message.ToString());
-            Debug.Log($"[Status] Updated to: {status}");
-        }
-    }
-    
-    void SendJobDone(string mapId, JObject result, int nextTime)
-    {
-        if (ws != null && ws.IsAlive)
-        {
-            var message = new JObject
-            {
-                ["type"] = "job_done",
-                ["map_id"] = mapId,
-                ["result"] = result,
-                ["next_time"] = nextTime
-            };
-            
-            ws.Send(message.ToString());
-            Debug.Log($"[WebSocket] Job done notification sent for {mapId}");
-        }
+            ["type"] = "status_update",
+            ["status"] = status
+        };
+
+        ws.Send(message.ToString());
+        Debug.Log($"[Status] 🔄 Changed to: {status}");
     }
 
-    void SendError(string mapId, string errorMessage)
+    void SendJobDone(string mapId, JObject result, int nextTimeSeconds)
     {
-        if (ws != null && ws.IsAlive)
+        if (ws == null || !ws.IsAlive) return;
+
+        JObject message = new JObject
         {
-            var message = new JObject
-            {
-                ["type"] = "error",
-                ["map_id"] = mapId,
-                ["error"] = errorMessage
-            };
-            
-            ws.Send(message.ToString());
-            Debug.LogError($"[WebSocket] Error notification sent: {errorMessage}");
-        }
+            ["type"] = "job_done",
+            ["map_id"] = mapId,
+            ["result"] = result,
+            ["next_time"] = nextTimeSeconds
+        };
+
+        ws.Send(message.ToString());
+        Debug.Log($"[WebSocket] ⬆ Sent job_done for {mapId}");
     }
 
-    void HandleCommand(string action, JObject data)
+    void SendError(string error)
     {
-        // Handle manual commands from dashboard
-        switch (action)
+        if (ws == null || !ws.IsAlive) return;
+
+        JObject message = new JObject
         {
-            case "ping":
-                Debug.Log("[Command] Ping received, sending pong");
-                SendStatusUpdate("idle");
-                break;
-            case "restart":
-                Debug.Log("[Command] Restart requested");
-                // Implement restart logic
-                break;
-            default:
-                Debug.LogWarning($"[Command] Unknown action: {action}");
-                break;
-        }
+            ["type"] = "error",
+            ["error"] = error
+        };
+
+        ws.Send(message.ToString());
+        Debug.LogError($"[Error] Sent: {error}");
+    }
+
+    void SendDisconnect()
+    {
+        if (ws == null || !ws.IsAlive) return;
+
+        JObject message = new JObject
+        {
+            ["type"] = "disconnect",
+            ["server_id"] = serverId
+        };
+
+        ws.Send(message.ToString());
+    }
+
+    // ================================================================
+    // CLEANUP
+    // ================================================================
+
+    void OnApplicationQuit()
+    {
+        SendDisconnect();
+        ws?.Close();
     }
 
     void OnDestroy()
     {
-        if (ws != null)
-        {
-            ws.Close();
-        }
-    }
-
-    void OnApplicationQuit()
-    {
-        if (ws != null)
-        {
-            ws.Close();
-        }
+        SendDisconnect();
+        ws?.Close();
     }
 }
