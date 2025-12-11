@@ -33,7 +33,6 @@ def submit_result(request):
     Body: {
         'map_id': '...',
         'server_id': '...',
-        'result': {...},
         'next_time': 3600  # seconds
     }
     Triggers async job completion handling.
@@ -42,7 +41,6 @@ def submit_result(request):
     
     map_id = request.data.get('map_id')
     server_id = request.data.get('server_id')
-    result = request.data.get('result', {})
     next_time = request.data.get('next_time', 3600)
     
     if not map_id or not server_id:
@@ -55,7 +53,6 @@ def submit_result(request):
     handle_job_completion.delay(
         map_id=map_id,
         server_id=server_id,
-        result_data=result,
         next_time_seconds=next_time
     )
     

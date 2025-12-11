@@ -16,8 +16,13 @@ class UnityServer(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='offline', db_index=True)
     last_heartbeat = models.DateTimeField(null=True, blank=True, db_index=True)
 
-    cpu_usage = models.FloatField(default=0.0)
-    ram_usage = models.FloatField(default=0.0)
+    idle_cpu_usage = models.FloatField(default=0.0)
+    idle_ram_usage = models.FloatField(default=0.0)
+
+    max_cpu_usage = models.FloatField(default=0.0)
+    max_ram_usage = models.FloatField(default=0.0)
+
+    disk_usage = models.FloatField(default=0.0)
 
     current_task = models.ForeignKey('Planet', on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_server')
 
@@ -77,7 +82,6 @@ class TaskHistory(models.Model):
     end_time = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='started')
     error_message = models.TextField(null=True, blank=True)
-    result_data = models.JSONField(null=True, blank=True)
     duration_seconds = models.FloatField(null=True, blank=True)
 
     class Meta:

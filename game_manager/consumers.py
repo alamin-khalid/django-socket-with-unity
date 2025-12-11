@@ -53,9 +53,9 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         Route incoming messages from Unity
 
         Message types:
-        - heartbeat: {"type": "heartbeat", "cpu": 45.2, "players": 0}
+        - heartbeat: {"type": "heartbeat", "idle_cpu": 15.2, "idle_ram": 40.5, "max_cpu": 75.0, "max_ram": 85.0, "disk": 60.0}
         - status_update: {"type": "status_update", "status": "busy"}
-        - job_done: {"type": "job_done", "map_id": "...", "result": {...}}
+        - job_done: {"type": "job_done", "map_id": "...", "next_time": 60}
         - error: {"type": "error", "error": "..."}
         """
         message_type = content.get('type')
@@ -64,7 +64,6 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
 
         if message_type == 'heartbeat':
             await self.handle_heartbeat(content)
-
         elif message_type == 'status_update':
             await self.handle_status_update(content)
 
@@ -88,16 +87,27 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
     def handle_heartbeat(self, data):
         """
         Update server heartbeat and stats
-        Unity sends every 5 seconds
+        Unity sends every 5 seconds with resource metrics
         """
         try:
-            UnityServer.objects.filter(server_id=self.server_id).update(
-                last_heartbeat=timezone.now(),
-                cpu_usage=data.get('cpu', 0.0),
-                status='idle'  # Heartbeat means server is alive
-            )
-            # Only log occasionally to avoid spam
-            # print(f"[Heartbeat] {self.server_id} - CPU: {data.get('cpu')}%")
+            update_fields = {
+                'last_heartbeat': timezone.now(),
+            }
+
+            # Update resource metrics if provided
+            if 'idle_cpu' in data:
+                update_fields['idle_cpu_usage'] = data['idle_cpu']
+            if 'idle_ram' in data:
+                update_fields['idle_ram_usage'] = data['idle_ram']
+            if 'max_cpu' in data:
+                update_fields['max_cpu_usage'] = data['max_cpu']
+            if 'max_ram' in data:
+                update_fields['max_ram_usage'] = data['max_ram']
+            if 'disk' in data:
+                update_fields['disk_usage'] = data['disk']
+
+            UnityServer.objects.filter(server_id=self.server_id).update(**update_fields)
+
         except Exception as e:
             print(f"[Heartbeat] ❌ Error: {e}")
 
@@ -127,14 +137,12 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
 
         try:
             map_id = data.get('map_id')
-            result = data.get('result', {})
             next_time = data.get('next_time', 60)
 
             # Trigger Celery task
             handle_job_completion.delay(
                 map_id=map_id,
                 server_id=self.server_id,
-                result_data=result,
                 next_time_seconds=next_time
             )
 
@@ -154,8 +162,6 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
     def handle_disconnect(self, data):
         """Handle explicit disconnect message from Unity"""
         print(f"[Disconnect] {self.server_id} is disconnecting gracefully")
-
-
 
     # ================================================================
     # MESSAGE SENDING (Django → Unity)
@@ -206,8 +212,6 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
             'params': event.get('params', {})
         })
 
-
-
     # ================================================================
     # DATABASE OPERATIONS
     # ================================================================
@@ -232,8 +236,11 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
                     'server_ip': server_ip,
                     'status': 'idle',
                     'last_heartbeat': timezone.now(),
-                    'cpu_usage': 0.0,
-                    'ram_usage': 0.0,
+                    'idle_cpu_usage': 0.0,
+                    'idle_ram_usage': 0.0,
+                    'max_cpu_usage': 0.0,
+                    'max_ram_usage': 0.0,
+                    'disk_usage': 0.0,
                     'connected_at': timezone.now(),
                     'disconnected_at': None
                 }

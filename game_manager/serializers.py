@@ -26,13 +26,20 @@ class UnityServerSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'server_id',
+            'server_ip',
             'status',
             'last_heartbeat',
-            'cpu_usage',
-            'ram_usage',
+            'idle_cpu_usage',
+            'idle_ram_usage',
+            'max_cpu_usage',
+            'max_ram_usage',
+            'disk_usage',
             'current_task_id',
             'connected_at',
+            'disconnected_at',
+            'total_assigned_map',
             'total_completed_map',
+            'total_failed_map',
             'uptime_seconds',
         ]
     
@@ -56,7 +63,6 @@ class TaskHistorySerializer(serializers.ModelSerializer):
             'start_time',
             'end_time',
             'status',
-            'result_data',
             'error_message',
             'duration_seconds',
         ]

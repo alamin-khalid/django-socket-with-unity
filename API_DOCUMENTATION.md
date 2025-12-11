@@ -27,8 +27,11 @@ ws.Connect();
 // Heartbeat (every 5 seconds)
 {
   "type": "heartbeat",
-  "cpu": 45.2,
-  "players": 0
+  "idle_cpu": 15.2,
+  "idle_ram": 40.5,
+  "max_cpu": 75.0,
+  "max_ram": 85.0,
+  "disk": 60.0
 }
 
 // Status Update
@@ -102,8 +105,11 @@ curl http://127.0.0.1:8000/api/map/map_001/
   "map_id": "map_001",
   "season_id": 1,
   "round_id": 5,
+  "current_round_number": 5,
   "status": "queued",
-  "next_round_time": "2025-12-10T12:00:00Z"
+  "next_round_time": "2025-12-10T12:00:00Z",
+  "last_processed": null,
+  "processing_server_id": null
 }
 ```
 
@@ -166,13 +172,23 @@ curl http://127.0.0.1:8000/api/servers/
 ```json
 [
   {
+    "id": 1,
     "server_id": "unity_192_168_1_100",
     "server_ip": "192.168.1.100",
     "status": "idle",
     "last_heartbeat": "2025-12-10T05:00:00Z",
-    "cpu_usage": 45.2,
-    "ram_usage": 60.5,
-    "connected_at": "2025-12-10T04:00:00Z"
+    "idle_cpu_usage": 15.2,
+    "idle_ram_usage": 40.5,
+    "max_cpu_usage": 75.0,
+    "max_ram_usage": 85.0,
+    "disk_usage": 60.0,
+    "current_task_id": null,
+    "connected_at": "2025-12-10T04:00:00Z",
+    "disconnected_at": null,
+    "total_assigned_map": 50,
+    "total_completed_map": 45,
+    "total_failed_map": 5,
+    "uptime_seconds": 3600
   }
 ]
 ```
@@ -193,13 +209,23 @@ curl http://127.0.0.1:8000/api/server/unity_192_168_1_100/
 **Response**:
 ```json
 {
+  "id": 1,
   "server_id": "unity_192_168_1_100",
   "server_ip": "192.168.1.100",
   "status": "busy",
-  "current_task": "map_001",
   "last_heartbeat": "2025-12-10T05:00:00Z",
-  "cpu_usage": 75.0,
-  "ram_usage": 80.0
+  "idle_cpu_usage": 15.2,
+  "idle_ram_usage": 40.5,
+  "max_cpu_usage": 75.0,
+  "max_ram_usage": 85.0,
+  "disk_usage": 60.0,
+  "current_task_id": "map_001",
+  "connected_at": "2025-12-10T04:00:00Z",
+  "disconnected_at": null,
+  "total_assigned_map": 50,
+  "total_completed_map": 45,
+  "total_failed_map": 5,
+  "uptime_seconds": 3600
 }
 ```
 

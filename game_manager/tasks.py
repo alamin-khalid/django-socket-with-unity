@@ -122,7 +122,7 @@ def assign_job_to_server(map_id: str, server_id: int):
         return False
 
 @shared_task
-def handle_job_completion(map_id: str, server_id: str, result_data: dict, next_time_seconds: int):
+def handle_job_completion(map_id: str, server_id: str, next_time_seconds: int):
     """
     Process completed job from Unity.
     - Update map status
@@ -132,7 +132,6 @@ def handle_job_completion(map_id: str, server_id: str, result_data: dict, next_t
     Args:
         map_id: Map identifier
         server_id: Server identifier (string, not DB ID)
-        result_data: Results from Unity calculation
         next_time_seconds: Seconds until next round
     """
     try:
@@ -168,7 +167,6 @@ def handle_job_completion(map_id: str, server_id: str, result_data: dict, next_t
         if task_history:
             task_history.status = 'completed'
             task_history.end_time = timezone.now()
-            task_history.result_data = result_data
             duration = (task_history.end_time - task_history.start_time).total_seconds()
             task_history.duration_seconds = duration
             task_history.save()
