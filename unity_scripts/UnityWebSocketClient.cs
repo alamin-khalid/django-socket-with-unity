@@ -11,22 +11,23 @@ using System.Threading.Tasks;
 [RequireComponent(typeof(PerformanceTracker))]
 public class UnityWebSocketClient : MonoBehaviour
 {
-    [Header("Backend Configuration")] public string backendWsUrl = "ws://127.0.0.1:8000/ws/server/";
-    public string backendApiUrl = "http://127.0.0.1:8000";
+    [Header("Backend Configuration")] public string backendWsUrl = "ws://http://103.12.214.244/ws/server/";
 
-    [Header("Server Identity")] public string serverId = ""; // Will auto-generate from public IP
+    // Will auto-generate from public IP
+    [Header("Server Identity")] public string serverId;
+
 
     private WebSocket ws;
     private string publicIP = "";
 
 
-    public float heartbeatTime = 0;
+    public float heartbeatTime;
 
     private WaitForSeconds _heartbeat;
 
     public bool IsInitialized { get; private set; }
 
-    [SerializeField] private PerformanceTracker _performanceTracker;
+    public PerformanceTracker performanceTracker;
 
 
     private void Awake()
@@ -35,9 +36,9 @@ public class UnityWebSocketClient : MonoBehaviour
 
         _heartbeat = new WaitForSeconds(heartbeatTime);
 
-        if (_performanceTracker == null)
+        if (performanceTracker == null)
         {
-            _performanceTracker = GetComponent<PerformanceTracker>();
+            performanceTracker = GetComponent<PerformanceTracker>();
         }
     }
 
@@ -46,7 +47,7 @@ public class UnityWebSocketClient : MonoBehaviour
         // 1. Get public IP first
         yield return StartCoroutine(GetPublicIP());
 
-        // 2. Set serverId 
+        // 2. Set serverId
         serverId = $"unity_{publicIP.Replace(".", "_")}";
 
         Debug.Log($"[Init] Server ID: {serverId}, Public IP: {publicIP}");
@@ -243,11 +244,11 @@ public class UnityWebSocketClient : MonoBehaviour
                 JObject message = new JObject
                 {
                     ["type"] = "heartbeat",
-                    ["idle_cpu"] = _performanceTracker.idlePeakCPU,
-                    ["max_cpu"] = _performanceTracker.taskPeakCPU,
-                    ["idle_ram"] = _performanceTracker.idlePeakRAM,
-                    ["max_ram"] = _performanceTracker.taskPeakRAM,
-                    ["disk"] = _performanceTracker.currentDisk,
+                    ["idle_cpu"] = performanceTracker.idlePeakCPU,
+                    ["max_cpu"] = performanceTracker.taskPeakCPU,
+                    ["idle_ram"] = performanceTracker.idlePeakRAM,
+                    ["max_ram"] = performanceTracker.taskPeakRAM,
+                    ["disk"] = performanceTracker.currentDisk
                 };
 
                 ws.Send(message.ToString());
@@ -269,15 +270,16 @@ public class UnityWebSocketClient : MonoBehaviour
         Debug.Log($"[Status] 🔄 Changed to: {status}");
     }
 
-    public void SendJobDone(int planetID, DateTime nextRoundTime)
+    public void SendJobDone(int planetID, DateTime nextRoundTime, string tilesJson)
     {
         if (ws == null || !ws.IsAlive) return;
 
         JObject message = new JObject
         {
             ["type"] = "job_done",
-            ["map_id"] = planetID,
-            ["next_time"] = nextRoundTime
+            ["planet_id"] = planetID,
+            ["next_calculation_time"] = nextRoundTime,
+            ["tiles_json"] = tilesJson
         };
 
         ws.Send(message.ToString());
@@ -297,6 +299,22 @@ public class UnityWebSocketClient : MonoBehaviour
         ws.Send(message.ToString());
         Debug.LogError($"[Error] Sent: {error}");
     }
+
+    public void SendFailed(int planetID, string cause)
+    {
+        if (ws == null || !ws.IsAlive) return;
+
+        JObject message = new JObject
+        {
+            ["type"] = "error",
+            ["planet_id"] = planetID,
+            ["error"] = cause
+        };
+
+        ws.Send(message.ToString());
+        Debug.LogError($"[Failed] Sent: {cause}");
+    }
+
 
     void SendDisconnect()
     {
