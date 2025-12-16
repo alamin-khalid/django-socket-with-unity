@@ -4,15 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="3804a2bc-4c31-4889-a28a-14dba2ad9f31" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/game_manager/consumers.py" beforeDir="false" afterPath="$PROJECT_DIR$/game_manager/consumers.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/game_manager/models.py" beforeDir="false" afterPath="$PROJECT_DIR$/game_manager/models.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/game_manager/tasks.py" beforeDir="false" afterPath="$PROJECT_DIR$/game_manager/tasks.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/game_manager/views.py" beforeDir="false" afterPath="$PROJECT_DIR$/game_manager/views.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/unity_scripts/UnityWebSocketClient.cs" beforeDir="false" afterPath="$PROJECT_DIR$/unity_scripts/UnityWebSocketClient.cs" afterDir="false" />
-    </list>
+    <list default="true" id="3804a2bc-4c31-4889-a28a-14dba2ad9f31" name="Changes" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
