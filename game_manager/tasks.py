@@ -122,7 +122,7 @@ def assign_job_to_server(map_id: str, server_id: int):
         return False
 
 @shared_task
-def handle_job_completion(map_id: str, server_id: str, next_time_seconds: int):
+def handle_job_completion(map_id: str, server_id: str, next_round_time_str: str):
     """
     Process completed job from Unity.
     - Update map status
@@ -132,16 +132,18 @@ def handle_job_completion(map_id: str, server_id: str, next_time_seconds: int):
     Args:
         map_id: Map identifier
         server_id: Server identifier (string, not DB ID)
-        next_time_seconds: Seconds until next round
+        next_round_time_str: ISO 8601 datetime string for next round
     """
+    from dateutil import parser
+    
     try:
         map_obj = Planet.objects.get(map_id=map_id)
         server = UnityServer.objects.get(server_id=server_id)
         
         logger.info(f"Processing job completion: {map_id} from {server_id}")
         
-        # Calculate next round time
-        next_round_time = timezone.now() + timedelta(seconds=next_time_seconds)
+        # Parse next round time from ISO string
+        next_round_time = parser.isoparse(next_round_time_str)
         
         # Update map
         map_obj.status = 'queued'

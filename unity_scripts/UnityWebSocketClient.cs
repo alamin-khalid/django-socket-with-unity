@@ -5,7 +5,10 @@ using System.Collections;
 using UnityEngine.Networking;
 using System;
 using System.Net;
+using System.Threading.Tasks;
 
+
+[RequireComponent(typeof(PerformanceTracker))]
 public class UnityWebSocketClient : MonoBehaviour
 {
     [Header("Backend Configuration")] public string backendWsUrl = "ws://127.0.0.1:8000/ws/server/";
@@ -15,28 +18,41 @@ public class UnityWebSocketClient : MonoBehaviour
 
     private WebSocket ws;
     private string publicIP = "";
-    private bool isProcessing = false;
 
-    private void Start()
+
+    public float heartbeatTime = 0;
+
+    private WaitForSeconds _heartbeat;
+
+    public bool IsInitialized { get; private set; }
+
+    [SerializeField] private PerformanceTracker _performanceTracker;
+
+
+    private void Awake()
     {
-        StartCoroutine(InitializeAndConnect());
+        IsInitialized = false;
+
+        _heartbeat = new WaitForSeconds(heartbeatTime);
+
+        if (_performanceTracker == null)
+        {
+            _performanceTracker = GetComponent<PerformanceTracker>();
+        }
     }
 
-    private IEnumerator InitializeAndConnect()
+    public IEnumerator InitializeAndConnect()
     {
         // 1. Get public IP first
         yield return StartCoroutine(GetPublicIP());
 
-        // 2. Set serverId if not manually configured
-        if (string.IsNullOrEmpty(serverId))
-        {
-            serverId = $"unity_{publicIP.Replace(".", "_")}";
-        }
+        // 2. Set serverId 
+        serverId = $"unity_{publicIP.Replace(".", "_")}";
 
         Debug.Log($"[Init] Server ID: {serverId}, Public IP: {publicIP}");
 
         // 3. Connect to WebSocket
-        Connect();
+        _ = Connect();
 
         // 4. Start heartbeat
         StartCoroutine(SendHeartbeat());
@@ -84,14 +100,18 @@ public class UnityWebSocketClient : MonoBehaviour
     // WEBSOCKET CONNECTION
     // ================================================================
 
-    void Connect()
+    private Task Connect()
     {
         string wsUrl = $"{backendWsUrl}{serverId}/";
         Debug.Log($"[WebSocket] Connecting to {wsUrl}...");
 
         ws = new WebSocket(wsUrl);
 
-        ws.OnOpen += (sender, e) => { Debug.Log($"[WebSocket] ✅ Connected as {serverId}"); };
+        ws.OnOpen += (sender, e) =>
+        {
+            IsInitialized = true;
+            Debug.Log($"[WebSocket] ✅ Connected as {serverId}");
+        };
 
         ws.OnMessage += (sender, e) =>
         {
@@ -103,20 +123,19 @@ public class UnityWebSocketClient : MonoBehaviour
 
         ws.OnClose += (sender, e) =>
         {
+            IsInitialized = false;
             Debug.LogWarning($"[WebSocket] Disconnected. Code: {e.Code}, Reason: {e.Reason}");
-
-            // Auto-reconnect after 5 seconds
-            Invoke(nameof(Connect), 5f);
         };
 
         ws.Connect();
+        return Task.CompletedTask;
     }
 
     // ================================================================
     // MESSAGE HANDLING (Django → Unity)
     // ================================================================
 
-    void HandleMessage(string message)
+    private void HandleMessage(string message)
     {
         try
         {
@@ -130,7 +149,7 @@ public class UnityWebSocketClient : MonoBehaviour
                     break;
 
                 case "command":
-                    OnCommand(data);
+                    OnCommandReceived(data);
                     break;
 
                 default:
@@ -144,28 +163,51 @@ public class UnityWebSocketClient : MonoBehaviour
         }
     }
 
-    void OnJobAssignment(JObject data)
+    private void OnJobAssignment(JObject data)
     {
-        if (isProcessing)
+        if (PinoWorldManager.Instance.IsSystemBusy)
         {
             Debug.LogWarning("[Job] Already processing, ignoring new assignment");
             return;
         }
 
-        string mapId = data["map_id"]?.ToString();
-        int roundId = data["round_id"]?.ToObject<int>() ?? 0;
-        int seasonId = data["season_id"]?.ToObject<int>() ?? 1;
 
-        Debug.Log($"[Job] 📋 Assigned: Map {mapId}, Season {seasonId}, Round {roundId}");
+        PlanetCalculateOrder _PlanetCalculateOrder = new PlanetCalculateOrder()
+        {
+            planetId = int.Parse(data["map_id"]?.ToString() ?? string.Empty),
+            roundId = data["round_id"]?.ToObject<int>() ?? 0,
+            seasonId = data["season_id"]?.ToObject<int>() ?? 0,
+        };
+
+
+        if (_PlanetCalculateOrder.planetId <= 0)
+        {
+            Debug.Log("Invalid mapId");
+            return;
+        }
+
+        if (_PlanetCalculateOrder.roundId <= 0)
+        {
+            Debug.Log("Invalid roundId");
+            return;
+        }
+
+        if (_PlanetCalculateOrder.seasonId <= 0)
+        {
+            Debug.Log("Invalid seasonId");
+            return;
+        }
+
+        Debug.Log($"[Job] 📋 Assigned: Map {_PlanetCalculateOrder.planetId}, Season {_PlanetCalculateOrder.seasonId}, Round {_PlanetCalculateOrder.roundId}");
 
         // Update status to busy
         SendStatusUpdate("busy");
 
         // Start processing
-        StartCoroutine(ProcessMapJob(mapId, seasonId, roundId));
+        _ = PinoWorldManager.Instance.OnPlanetCalculateOrderReceive(_PlanetCalculateOrder);
     }
 
-    void OnCommand(JObject data)
+    private void OnCommandReceived(JObject data)
     {
         string command = data["command"]?.ToString();
         Debug.Log($"[Command] Received: {command}");
@@ -185,105 +227,35 @@ public class UnityWebSocketClient : MonoBehaviour
         }
     }
 
-    // ================================================================
-    // JOB PROCESSING WORKFLOW
-    // ================================================================
-
-    IEnumerator ProcessMapJob(string mapId, int seasonId, int roundId)
-    {
-        isProcessing = true;
-
-        Debug.Log($"[Job] 🔄 Starting processing for {mapId}");
-
-        // 1. FETCH MAP DATA FROM API
-
-
-        // 2. SUBMIT RESULTS TO API
-        yield return StartCoroutine(SubmitResults(mapId, null, 0));
-
-        // 3. NOTIFY WEBSOCKET WE'RE DONE
-        SendJobDone(mapId, null, 0);
-
-        // 4. BACK TO IDLE
-        SendStatusUpdate("idle");
-        isProcessing = false;
-
-        Debug.Log($"[Job] ✅ Completed {mapId}");
-    }
-
-    // ================================================================
-    // API CALLS
-    // ================================================================
-
-    public IEnumerator SubmitResults(string mapId, JObject result, int nextTimeSeconds)
-    {
-        string apiUrl = $"{backendApiUrl}/api/result/";
-
-        JObject payload = new JObject
-        {
-            ["map_id"] = mapId,
-            ["server_id"] = serverId,
-            ["result"] = result,
-            ["next_time"] = nextTimeSeconds
-        };
-
-        Debug.Log($"[API] Submitting results to {apiUrl}");
-
-        UnityWebRequest request = new UnityWebRequest(apiUrl, "POST");
-        byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(payload.ToString());
-        request.uploadHandler = new UploadHandlerRaw(bodyRaw);
-        request.downloadHandler = new DownloadHandlerBuffer();
-        request.SetRequestHeader("Content-Type", "application/json");
-
-        yield return request.SendWebRequest();
-
-        if (request.result != UnityWebRequest.Result.Success)
-        {
-            Debug.LogError($"[API] ❌ Failed to submit results: {request.error}");
-        }
-        else
-        {
-            Debug.Log($"[API] ✅ Results submitted successfully");
-        }
-    }
 
     // ================================================================
     // WEBSOCKET MESSAGES (Unity → Django)
     // ================================================================
 
-    IEnumerator SendHeartbeat()
+    private IEnumerator SendHeartbeat()
     {
-        while (true)
+        while (Application.isPlaying)
         {
-            if (isProcessing)
-            {
-                // Wait until isProcessing becomes false
-                yield return new WaitWhile(() => isProcessing);
-            }
-            else
-            {
-                yield return new WaitForSeconds(5f);
-            }
-
+            yield return _heartbeat;
 
             if (ws != null && ws.IsAlive)
             {
-                float cpuUsage = UnityEngine.Random.Range(30f, 60f); // Mock CPU usage
-
                 JObject message = new JObject
                 {
                     ["type"] = "heartbeat",
-                    ["cpu"] = cpuUsage,
-                    ["players"] = 0
+                    ["idle_cpu"] = _performanceTracker.idlePeakCPU,
+                    ["max_cpu"] = _performanceTracker.taskPeakCPU,
+                    ["idle_ram"] = _performanceTracker.idlePeakRAM,
+                    ["max_ram"] = _performanceTracker.taskPeakRAM,
+                    ["disk"] = _performanceTracker.currentDisk,
                 };
 
                 ws.Send(message.ToString());
-                // Debug.Log($"[Heartbeat] Sent: CPU {cpuUsage:F1}%");
             }
         }
     }
 
-    void SendStatusUpdate(string status)
+    public void SendStatusUpdate(string status)
     {
         if (ws == null || !ws.IsAlive) return;
 
@@ -297,23 +269,22 @@ public class UnityWebSocketClient : MonoBehaviour
         Debug.Log($"[Status] 🔄 Changed to: {status}");
     }
 
-    void SendJobDone(string mapId, JObject result, int nextTimeSeconds)
+    public void SendJobDone(int planetID, DateTime nextRoundTime)
     {
         if (ws == null || !ws.IsAlive) return;
 
         JObject message = new JObject
         {
             ["type"] = "job_done",
-            ["map_id"] = mapId,
-            ["result"] = result,
-            ["next_time"] = nextTimeSeconds
+            ["map_id"] = planetID,
+            ["next_time"] = nextRoundTime
         };
 
         ws.Send(message.ToString());
-        Debug.Log($"[WebSocket] ⬆ Sent job_done for {mapId}");
+        Debug.Log($"[WebSocket] ⬆ Sent job_done for {planetID}");
     }
 
-    void SendError(string error)
+    public void SendError(string error)
     {
         if (ws == null || !ws.IsAlive) return;
 
@@ -350,9 +321,23 @@ public class UnityWebSocketClient : MonoBehaviour
         ws?.Close();
     }
 
+    private void OnDisable()
+    {
+        SendDisconnect();
+        ws?.Close();
+    }
+
     void OnDestroy()
     {
         SendDisconnect();
         ws?.Close();
     }
+}
+
+
+public class PlanetCalculateOrder
+{
+    public int planetId;
+    public int seasonId;
+    public int roundId;
 }

@@ -55,7 +55,7 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         Message types:
         - heartbeat: {"type": "heartbeat", "idle_cpu": 15.2, "idle_ram": 40.5, "max_cpu": 75.0, "max_ram": 85.0, "disk": 60.0}
         - status_update: {"type": "status_update", "status": "busy"}
-        - job_done: {"type": "job_done", "map_id": "...", "next_time": 60}
+        - job_done: {"type": "job_done", "map_id": "...", "next_round_time": "2025-12-12T03:00:00Z"}
         - error: {"type": "error", "error": "..."}
         """
         message_type = content.get('type')
@@ -137,16 +137,20 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
 
         try:
             map_id = data.get('map_id')
-            next_time = data.get('next_time', 60)
+            next_round_time = data.get('next_round_time')
+
+            if not next_round_time:
+                print(f"[Job Done] ⚠ Missing next_round_time for {map_id}")
+                return
 
             # Trigger Celery task
             handle_job_completion.delay(
                 map_id=map_id,
                 server_id=self.server_id,
-                next_time_seconds=next_time
+                next_round_time_str=next_round_time
             )
 
-            print(f"[Job Done] ✅ {self.server_id} completed {map_id}")
+            print(f"[Job Done] ✅ {self.server_id} completed {map_id}, next: {next_round_time}")
         except Exception as e:
             print(f"[Job Done] ❌ Error: {e}")
 

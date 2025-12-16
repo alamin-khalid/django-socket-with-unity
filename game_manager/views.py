@@ -33,15 +33,17 @@ def submit_result(request):
     Body: {
         'map_id': '...',
         'server_id': '...',
-        'next_time': 3600  # seconds
+        'next_round_time': '2025-12-12T03:00:00Z'  # ISO 8601 datetime string
     }
     Triggers async job completion handling.
     """
     from .tasks import handle_job_completion
     
+    from dateutil import parser
+    
     map_id = request.data.get('map_id')
     server_id = request.data.get('server_id')
-    next_time = request.data.get('next_time', 3600)
+    next_round_time_str = request.data.get('next_round_time')
     
     if not map_id or not server_id:
         return Response(
@@ -49,11 +51,26 @@ def submit_result(request):
             status=status.HTTP_400_BAD_REQUEST
         )
     
+    if not next_round_time_str:
+        return Response(
+            {'error': 'Missing next_round_time'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        # Parse ISO 8601 datetime string
+        next_round_time = parser.isoparse(next_round_time_str)
+    except (ValueError, TypeError) as e:
+        return Response(
+            {'error': f'Invalid datetime format: {str(e)}'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
     # Trigger async job completion
     handle_job_completion.delay(
         map_id=map_id,
         server_id=server_id,
-        next_time_seconds=next_time
+        next_round_time_str=next_round_time.isoformat()
     )
     
     return Response({'status': 'accepted', 'message': 'Result processing initiated'})

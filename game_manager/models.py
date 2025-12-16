@@ -8,6 +8,7 @@ class UnityServer(models.Model):
         ('idle', 'Idle'),
         ('busy', 'Busy'),
         ('not_responding', 'Not Responding'),
+        ('not_initialized', 'Not Initialized'),
     ]
 
     server_id = models.CharField(max_length=100, unique=True, db_index=True)
