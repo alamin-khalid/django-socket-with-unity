@@ -47,7 +47,7 @@
                 </td>
                 <td>
                     <button class="btn-restart" onclick="sendCommand('{{ server.server_id }}', 'restart_server')">Restart</button>
-                    {% if server.status == 'busy' %}
+                    {% if server.status != 'busy' %}
                     <button class="btn-cancel" onclick="sendCommand('{{ server.server_id }}', 'stop_game')">Cancel Task</button>
                     {% endif %}
                 </td>
