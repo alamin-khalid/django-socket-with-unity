@@ -199,14 +199,53 @@ class DashboardView(View):
     Admin dashboard showing server status and map queue.
     """
     def get(self, request):
+        from django.db.models import Avg
+        
         servers = UnityServer.objects.all().order_by('server_id')
         maps = Planet.objects.exclude(status='completed').order_by('next_round_time')[:20]
+        
+        # Get recent task history (last 50 tasks)
+        recent_tasks = TaskHistory.objects.select_related(
+            'map', 'server'
+        ).order_by('-start_time')[:50]
+        
+        # Calculate statistics
+        total_tasks = TaskHistory.objects.count()
+        completed_tasks = TaskHistory.objects.filter(status='completed').count()
+        failed_tasks = TaskHistory.objects.filter(status='failed').count()
+        timeout_tasks = TaskHistory.objects.filter(status='timeout').count()
+        
+        # Calculate average processing time
+        avg_duration = TaskHistory.objects.filter(
+            status='completed',
+            duration_seconds__isnull=False
+        ).aggregate(Avg('duration_seconds'))['duration_seconds__avg'] or 0
+        
+        # Server statistics
+        idle_servers = servers.filter(status='idle').count()
+        busy_servers = servers.filter(status='busy').count()
+        offline_servers = servers.filter(status='offline').count()
+        not_init_servers = servers.filter(status='not_initialized').count()
         
         context = {
             'servers': servers,
             'maps': maps,
             'queue_size': get_queue_size(),
             'next_due': peek_next_due_time(),
+            # Task history and statistics
+            'recent_tasks': recent_tasks,
+            'total_tasks': total_tasks,
+            'completed_tasks': completed_tasks,
+            'failed_tasks': failed_tasks,
+            'timeout_tasks': timeout_tasks,
+            'avg_duration': round(avg_duration, 2),
+            'success_rate': round((completed_tasks / total_tasks * 100) if total_tasks > 0 else 0, 1),
+            # Server statistics
+            'idle_servers': idle_servers,
+            'busy_servers': busy_servers,
+            'offline_servers': offline_servers,
+            'not_init_servers': not_init_servers,
+            'total_servers': servers.count(),
         }
         
         return render(request, 'game_manager/dashboard.html', context)
