@@ -28,6 +28,60 @@ def get_map_data(request, map_id):
         return Response({'error': 'Map not found'}, status=status.HTTP_404_NOT_FOUND)
 
 @api_view(['POST'])
+def create_map(request):
+    """
+    POST /api/map/create/
+    Body: {
+        'map_id': 'planet_123',  # Required, also called planetId
+        'season_id': 1,           # Required
+        'round_id': 0,            # Optional, defaults to 0
+        'current_round_number': 0, # Optional, defaults to 0
+    }
+    Creates a new map/planet with validation to prevent duplicates.
+    Automatically adds it the processing queue.
+    """
+    from .redis_queue import add_map_to_queue
+    
+    map_id = request.data.get('map_id')
+    
+    # Validate that map_id is provided
+    if not map_id:
+        return Response(
+            {'error': 'map_id (planetId) is required'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Check for duplicate map_id
+    if Planet.objects.filter(map_id=map_id).exists():
+        return Response(
+            {'error': f'Map with map_id "{map_id}" already exists'}, 
+            status=status.HTTP_409_CONFLICT
+        )
+    
+    # Prepare data for serializer
+    data = request.data.copy()
+    
+    # Always set next_round_time to NOW
+    data['next_round_time'] = timezone.now().isoformat()
+    
+    # Create the map using serializer
+    serializer = PlanetSerializer(data=data)
+    if serializer.is_valid():
+        map_obj = serializer.save()
+        
+        # Add to Redis queue for immediate processing
+        try:
+            add_map_to_queue(map_obj.map_id, map_obj.next_round_time)
+        except Exception as e:
+            # Log error but don't fail the request
+            print(f"Failed to add map {map_obj.map_id} to queue: {e}")
+            # Optionally we could add a warning to the response
+        
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    else:
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
 def submit_result(request):
     """
     Unity calls: POST /api/result/

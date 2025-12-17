@@ -115,7 +115,82 @@ curl http://127.0.0.1:8000/api/map/map_001/
 
 ---
 
-### 3. Submit Result
+### 3. Create Map
+**Method**: `POST`  
+**URL**: `/api/map/create/`
+
+**Description**: Create a new map/planet by providing planetId and configuration.
+
+**Request Body**:
+```json
+{
+  "map_id": "planet_123",
+  "season_id": 1,
+  "round_id": 0,
+  "current_round_number": 0
+}
+```
+
+**Required Fields**:
+- `map_id` (string): Unique planet/map identifier (also called planetId)
+- `season_id` (integer): Season identifier
+
+**Optional Fields**:
+- `round_id` (integer): Round identifier, defaults to 0
+- `current_round_number` (integer): Current round number, defaults to 0
+
+**Note**: Created maps are automatically added to the processing queue with `next_round_time` set to **NOW**, so they will be picked up by idle servers immediately.
+
+**Example**:
+```bash
+curl -X POST http://127.0.0.1:8000/api/map/create/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "map_id": "planet_123",
+    "season_id": 1,
+    "round_id": 0,
+    "current_round_number": 0
+  }'
+```
+
+**Response (Success - 201 Created)**:
+```json
+{
+  "map_id": "planet_123",
+  "season_id": 1,
+  "round_id": 0,
+  "current_round_number": 0,
+  "next_round_time": "2025-12-20T10:00:00Z",
+  "status": "queued",
+  "last_processed": null,
+  "processing_server_id": null
+}
+```
+
+**Response (Duplicate - 409 Conflict)**:
+```json
+{
+  "error": "Map with map_id \"planet_123\" already exists"
+}
+```
+
+**Response (Missing Field - 400 Bad Request)**:
+```json
+{
+  "error": "map_id (planetId) is required"
+}
+```
+
+**Response (Validation Error - 400 Bad Request)**:
+```json
+{
+  "next_round_time": ["Datetime has wrong format. Use one of these formats instead: YYYY-MM-DDThh:mm[:ss[.uuuuuu]][+HH:MM|-HH:MM|Z]."]
+}
+```
+
+---
+
+### 4. Submit Result
 **Method**: `POST`  
 **URL**: `/api/result/`
 
@@ -157,7 +232,7 @@ curl -X POST http://127.0.0.1:8000/api/result/ \
 
 ---
 
-### 4. List Servers
+### 5. List Servers
 **Method**: `GET`  
 **URL**: `/api/servers/`
 
@@ -195,7 +270,7 @@ curl http://127.0.0.1:8000/api/servers/
 
 ---
 
-### 5. Server Detail
+### 6. Server Detail
 **Method**: `GET`  
 **URL**: `/api/server/{server_id}/`
 
@@ -231,7 +306,7 @@ curl http://127.0.0.1:8000/api/server/unity_192_168_1_100/
 
 ---
 
-### 6. Queue Status
+### 7. Queue Status
 **Method**: `GET`  
 **URL**: `/api/queue/`
 
@@ -257,7 +332,7 @@ curl http://127.0.0.1:8000/api/queue/
 
 ---
 
-### 7. Send Command
+### 8. Send Command
 **Method**: `POST`  
 **URL**: `/api/command/`
 
@@ -307,7 +382,7 @@ curl -X POST http://127.0.0.1:8000/api/command/ \
 
 ## Web Interface
 
-### 8. Dashboard
+### 9. Dashboard
 **Method**: `GET`  
 **URL**: `/dashboard/`
 
@@ -326,7 +401,7 @@ http://127.0.0.1:8000/dashboard/
 
 ---
 
-### 9. Django Admin
+### 10. Django Admin
 **Method**: `GET`  
 **URL**: `/admin/`
 

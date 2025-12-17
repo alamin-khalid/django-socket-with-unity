@@ -16,6 +16,7 @@ class PlanetSerializer(serializers.ModelSerializer):
             'last_processed',
             'processing_server_id',
         ]
+        read_only_fields = ['status', 'last_processed', 'processing_server_id']
 
 class UnityServerSerializer(serializers.ModelSerializer):
     current_task_id = serializers.CharField(source='current_task.map_id', read_only=True, allow_null=True)
