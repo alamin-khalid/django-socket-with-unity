@@ -166,7 +166,7 @@
         }
 
         tr:hover {
-            background-color: #f8f9fa;
+            background-color: var(--th-bg);
         }
 
         /* Status Badges */
@@ -289,7 +289,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎮 Server Orchestrator Dashboard</h1>
+            <h1>🎮 Unity Server Orchestrator Dashboard</h1>
             <button class="theme-toggle" onclick="toggleTheme()">🌙 Night Mode</button>
         </div>
 
@@ -500,11 +500,34 @@
             document.querySelector('.theme-toggle').textContent = isDark ? '☀️ Day Mode' : '🌙 Night Mode';
         }
 
-        // Load saved theme preference
-        if (localStorage.getItem('darkMode') === 'true') {
-            document.body.classList.add('dark-mode');
-            document.querySelector('.theme-toggle').textContent = '☀️ Day Mode';
+        // Detect system theme preference or use saved preference
+        function initTheme() {
+            const savedTheme = localStorage.getItem('darkMode');
+            const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+            // Use saved preference if exists, otherwise use system preference
+            const isDark = savedTheme !== null ? savedTheme === 'true' : systemDark;
+
+            if (isDark) {
+                document.body.classList.add('dark-mode');
+                document.querySelector('.theme-toggle').textContent = '☀️ Day Mode';
+            }
         }
+        initTheme();
+
+        // Listen for system theme changes
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+            if (localStorage.getItem('darkMode') === null) {
+                // Only auto-switch if user hasn't manually set preference
+                if (e.matches) {
+                    document.body.classList.add('dark-mode');
+                    document.querySelector('.theme-toggle').textContent = '☀️ Day Mode';
+                } else {
+                    document.body.classList.remove('dark-mode');
+                    document.querySelector('.theme-toggle').textContent = '🌙 Night Mode';
+                }
+            }
+        });
 
         // Auto-refresh every 5 seconds
         setTimeout(() => location.reload(), 5000);

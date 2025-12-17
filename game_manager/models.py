@@ -69,6 +69,21 @@ class Planet(models.Model):
         return f"Map {self.map_id} - Season {self.season_id} - Round {self.round_id}"
 
 
+# Signal to remove map from Redis queue when deleted
+from django.db.models.signals import pre_delete
+from django.dispatch import receiver
+
+@receiver(pre_delete, sender=Planet)
+def remove_map_from_queue_on_delete(sender, instance, **kwargs):
+    """Remove map from Redis queue when Planet is deleted from database."""
+    try:
+        from .redis_queue import remove_from_queue
+        remove_from_queue(instance.map_id)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Could not remove {instance.map_id} from queue: {e}")
+
+
 class TaskHistory(models.Model):
     STATUS_CHOICES = [
         ('started', 'Started'),
