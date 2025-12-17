@@ -44,8 +44,7 @@ ws.Connect();
 {
   "type": "job_done",
   "map_id": "map_001",
-  "result": { "winner": "player1", "score": 1500 },
-  "next_time": 3600  // seconds until next round
+  "next_round_time": "2025-12-18T12:00:00Z"  // ISO 8601 datetime string for next round
 }
 
 // Error Report
@@ -119,25 +118,25 @@ curl http://127.0.0.1:8000/api/map/map_001/
 **Method**: `POST`  
 **URL**: `/api/map/create/`
 
-**Description**: Create a new map/planet by providing planetId and configuration.
+**Description**: Create a new map/planet by providing planetId and season.
 
 **Request Body**:
 ```json
 {
   "map_id": "planet_123",
-  "season_id": 1,
-  "round_id": 0,
-  "current_round_number": 0
+  "season_id": 1
 }
 ```
 
 **Required Fields**:
 - `map_id` (string): Unique planet/map identifier (also called planetId)
+  - Must contain only letters, numbers, underscores, and hyphens
+  - Maximum 100 characters
 - `season_id` (integer): Season identifier
 
 **Optional Fields**:
-- `round_id` (integer): Round identifier, defaults to 0
-- `current_round_number` (integer): Current round number, defaults to 0
+- `round_id` (integer): Round identifier, defaults to 0 if not provided
+- `current_round_number` (integer): Current round number, defaults to 0 if not provided
 
 **Note**: Created maps are automatically added to the processing queue with `next_round_time` set to **NOW**, so they will be picked up by idle servers immediately.
 
@@ -147,9 +146,7 @@ curl -X POST http://127.0.0.1:8000/api/map/create/ \
   -H "Content-Type: application/json" \
   -d '{
     "map_id": "planet_123",
-    "season_id": 1,
-    "round_id": 0,
-    "current_round_number": 0
+    "season_id": 1
   }'
 ```
 
@@ -160,7 +157,7 @@ curl -X POST http://127.0.0.1:8000/api/map/create/ \
   "season_id": 1,
   "round_id": 0,
   "current_round_number": 0,
-  "next_round_time": "2025-12-20T10:00:00Z",
+  "next_round_time": "2025-12-18T01:46:44Z",
   "status": "queued",
   "last_processed": null,
   "processing_server_id": null
@@ -201,14 +198,14 @@ curl -X POST http://127.0.0.1:8000/api/map/create/ \
 {
   "map_id": "map_001",
   "server_id": "unity_192_168_1_100",
-  "result": {
-    "winner": "player1",
-    "score": 1500,
-    "duration": 300
-  },
-  "next_time": 3600
+  "next_round_time": "2025-12-18T12:00:00Z"
 }
 ```
+
+**Required Fields**:
+- `map_id` (string): Map identifier
+- `server_id` (string): Server identifier
+- `next_round_time` (string): ISO 8601 datetime string for when the next round should be processed
 
 **Example**:
 ```bash
@@ -217,8 +214,7 @@ curl -X POST http://127.0.0.1:8000/api/result/ \
   -d '{
     "map_id": "map_001",
     "server_id": "unity_192_168_1_100",
-    "result": {"winner": "player1", "score": 1500},
-    "next_time": 3600
+    "next_round_time": "2025-12-18T12:00:00Z"
   }'
 ```
 
@@ -441,6 +437,73 @@ All endpoints return standard HTTP status codes:
 
 ---
 
+## ⚠️ Important Notes
+
+### Unity Client Implementation
+
+> [!IMPORTANT]
+> The Unity client script must send the correct field names in WebSocket messages to match the backend API expectations.
+
+> [!CAUTION]
+> **CRITICAL:** The current Unity client is missing the `SendJobDone` method and has incorrect server ID format. Without fixing these, the system will not function properly.
+
+**Critical Requirements for `job_done` message:**
+
+1. **Field Names Must Match:**
+   - Use `map_id` (NOT `planet_id`)
+   - Use `next_round_time` (NOT `next_calculation_time`)
+
+2. **DateTime Format:**
+   - `next_round_time` must be an ISO 8601 datetime string
+   - Example: `"2025-12-18T12:00:00Z"` or `"2025-12-18T12:00:00+00:00"`
+   - In C#, use: `nextRoundTime.ToString("O")` or `nextRoundTime.ToUniversalTime().ToString("o")`
+
+3. **Status Updates:**
+   - After sending `job_done`, the Unity client should send a `status_update` message with `"status": "idle"` to allow new assignments
+   - Alternatively, ensure your game manager calls `SendStatusUpdate("idle")` after job completion
+
+**Example Unity Implementation:**
+```csharp
+// ⚠️ THIS METHOD IS MISSING FROM CURRENT UnityWebSocketClient.cs
+// Add this to the "OUTGOING MESSAGES" section around line 307
+
+public void SendJobDone(string mapId, DateTime nextRoundTime)
+{
+    if (ws == null || !ws.IsAlive) return;
+
+    ws.Send(new JObject
+    {
+        ["type"] = "job_done",
+        ["map_id"] = mapId,  // ✅ Correct field name (not planet_id)
+        ["next_round_time"] = nextRoundTime.ToString("O")  // ✅ ISO 8601 format
+    }.ToString());
+    
+    Debug.Log($"[Job Done] ✅ Sent completion for {mapId}, next: {nextRoundTime:O}");
+    
+    // Mark server as idle for new assignments
+    SendStatusUpdate("idle");
+}
+```
+
+**Additional Required Fixes:**
+
+1. **Fix Server ID Format (line 62):**
+```csharp
+// ❌ Current (wrong):
+serverId = publicIP.Replace(".", "_");
+
+// ✅ Fixed:
+serverId = $"unity_{publicIP.Replace(".", "_")}";
+```
+
+2. **Update SendFailed consistency (line 315):**
+```csharp
+// Consider using "map_id" instead of "planet_id" for consistency
+["map_id"] = planetId.ToString(),
+```
+
+---
+
 ## Testing with cURL
 
 **Test WebSocket** (requires `websocat`):
@@ -474,47 +537,45 @@ curl -X POST http://127.0.0.1:8000/api/command/ \
 
 ## Unity Integration Example
 
+> [!WARNING]
+> The code below shows the **intended** implementation. The current `UnityWebSocketClient.cs` has been refactored and is missing critical functionality. See the Important Notes section above for required fixes.
+
+**Updated Integration Pattern:**
+
 ```csharp
 using WebSocketSharp;
-using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System;
 
-public class ServerConnection
+public class ServerConnection : MonoBehaviour
 {
-    private WebSocket ws;
+    private UnityWebSocketClient wsClient;
     
-    public void Connect(string serverId)
+    private void Start()
     {
-        ws = new WebSocket($"ws://127.0.0.1:8000/ws/server/{serverId}/");
-        
-        ws.OnOpen += (sender, e) => {
-            Debug.Log("Connected to orchestrator");
-            SendHeartbeat();
-        };
-        
-        ws.OnMessage += (sender, e) => {
-            var data = JsonConvert.DeserializeObject<Dictionary<string, object>>(e.Data);
-            HandleMessage(data);
-        };
-        
-        ws.Connect();
+        wsClient = GetComponent<UnityWebSocketClient>();
+        StartCoroutine(wsClient.InitializeAndConnect());
     }
     
-    private void SendHeartbeat()
+    // Called when job processing completes
+    private void OnJobComplete(string mapId, DateTime nextRoundTime)
     {
-        var heartbeat = new {
-            type = "heartbeat",
-            cpu = SystemInfo.processorCount,
-            players = 0
-        };
-        ws.Send(JsonConvert.SerializeObject(heartbeat));
+        // ⚠️ This method must be added to UnityWebSocketClient
+        wsClient.SendJobDone(mapId, nextRoundTime);
     }
     
-    private void HandleMessage(Dictionary<string, object> data)
+    // Handle errors during processing
+    private void OnJobError(int planetId, string errorMessage)
     {
-        if (data["type"].ToString() == "assign_job") {
-            string mapId = data["map_id"].ToString();
-            ProcessJob(mapId);
-        }
+        wsClient.SendFailed(planetId, errorMessage);
     }
 }
 ```
+
+**Key Features of Refactored Client:**
+- ✅ Automatic reconnection with exponential backoff (5s → 30s max)
+- ✅ Thread-safe message handling via MainThreadDispatcher (already in project)
+- ✅ Improved error tracking and logging
+- ✅ Graceful disconnect on application quit
+- ❌ Missing SendJobDone method (must be added)
+- ❌ Wrong server ID format (must be fixed)

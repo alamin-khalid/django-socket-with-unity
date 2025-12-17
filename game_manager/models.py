@@ -12,7 +12,7 @@ class UnityServer(models.Model):
     ]
 
     server_id = models.CharField(max_length=100, unique=True, db_index=True)
-    server_ip = models.CharField(max_length=100, unique=True, db_index=True)
+    server_ip = models.CharField(max_length=100, db_index=True)
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='offline', db_index=True)
     last_heartbeat = models.DateTimeField(null=True, blank=True, db_index=True)

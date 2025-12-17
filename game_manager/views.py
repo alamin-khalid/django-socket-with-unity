@@ -34,12 +34,11 @@ def create_map(request):
     Body: {
         'map_id': 'planet_123',  # Required, also called planetId
         'season_id': 1,           # Required
-        'round_id': 0,            # Optional, defaults to 0
-        'current_round_number': 0, # Optional, defaults to 0
     }
     Creates a new map/planet with validation to prevent duplicates.
     Automatically adds it the processing queue.
     """
+    import re
     from .redis_queue import add_map_to_queue
     
     map_id = request.data.get('map_id')
@@ -48,6 +47,20 @@ def create_map(request):
     if not map_id:
         return Response(
             {'error': 'map_id (planetId) is required'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Validate map_id format (alphanumeric, underscore, hyphen only)
+    if not re.match(r'^[a-zA-Z0-9_-]+$', str(map_id)):
+        return Response(
+            {'error': 'map_id must contain only letters, numbers, underscores, and hyphens'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Validate map_id length
+    if len(str(map_id)) > 100:
+        return Response(
+            {'error': 'map_id must be 100 characters or less'}, 
             status=status.HTTP_400_BAD_REQUEST
         )
     
@@ -79,7 +92,9 @@ def create_map(request):
             
         except Exception as e:
             # Log error but don't fail the request
-            print(f"Failed to add/assign map {map_obj.map_id}: {e}")
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to add/assign map {map_obj.map_id}: {e}")
         
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     else:

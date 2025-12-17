@@ -15,6 +15,27 @@ def assign_available_maps():
     # Get maps that are due for processing
     due_map_ids = get_due_maps(limit=20)
     
+    # --- QUEUE RECOVERY / SELF-HEALING ---
+    # If Redis queue is empty, check if we have "queued" maps in DB that were missed
+    # (e.g. due to Redis restart or desync)
+    if not due_map_ids:
+        from django.utils import timezone
+        # Check for maps that should be processed (queued and time passed)
+        missed_maps = Planet.objects.filter(
+            status='queued', 
+            next_round_time__lte=timezone.now()
+        ).order_by('next_round_time')[:20]
+        
+        if missed_maps.exists():
+            from .redis_queue import add_map_to_queue
+            logger.warning(f"Found {missed_maps.count()} queued maps in DB missing from Redis. Re-queueing...")
+            
+            for map_obj in missed_maps:
+                add_map_to_queue(map_obj.map_id, map_obj.next_round_time)
+                due_map_ids.append(map_obj.map_id)
+            
+            logger.info(f"Recovered {len(due_map_ids)} maps from DB fallback")
+
     if not due_map_ids:
         # No maps waiting
         return "No due maps"
@@ -23,6 +44,15 @@ def assign_available_maps():
     idle_servers = list(UnityServer.objects.filter(status='idle').order_by('total_completed_map'))
     
     if not idle_servers:
+        # Debug: Why no servers?
+        all_counts = {
+            'idle': UnityServer.objects.filter(status='idle').count(),
+            'busy': UnityServer.objects.filter(status='busy').count(),
+            'offline': UnityServer.objects.filter(status='offline').count(),
+            'total': UnityServer.objects.count()
+        }
+        logger.warning(f"No idle servers! Stats: {all_counts}")
+        
         # No servers available
         return f"No idle servers for {len(due_map_ids)} due maps"
     
@@ -42,10 +72,7 @@ def assign_available_maps():
             # Get next idle server
             server = idle_servers.pop(0)
             
-            # Assign job
-            # Note: assign_job_to_server is a shared_task.
-            # If CELERY_TASK_ALWAYS_EAGER is True, it runs synchronously.
-            # Otherwise it queues to a worker.
+            # Assign job (runs immediately in eager mode)
             assign_job_to_server.delay(map_obj.map_id, server.id)
             
             # Remove from Redis queue
@@ -55,8 +82,7 @@ def assign_available_maps():
             logger.info(f"Assigned map {map_id} to server {server.server_id}")
                 
         except Planet.DoesNotExist:
-            # Map was deleted or already processing
-            logger.warning(f"Map {map_id} not found or not queued, removing from queue")
+            logger.warning(f"Map {map_id} not found or not queued")
             remove_from_queue(map_id)
             continue
         except Exception as e:

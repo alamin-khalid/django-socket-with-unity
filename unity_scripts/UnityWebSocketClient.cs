@@ -4,244 +4,278 @@ using Newtonsoft.Json.Linq;
 using System.Collections;
 using UnityEngine.Networking;
 using System;
-using System.Net;
 using System.Threading.Tasks;
-
 
 [RequireComponent(typeof(PerformanceTracker))]
 public class UnityWebSocketClient : MonoBehaviour
 {
-    [Header("Backend Configuration")] public string backendWsUrl = "ws://http://103.12.214.244/ws/server/";
+    // [Header("Backend Configuration")] public string backendWsUrl = "ws://103.12.214.244/ws/server/";
+    [Header("Backend Configuration")] public string backendWsUrl = "ws://127.0.0.1:8000/ws/server/";
 
-    // Will auto-generate from public IP
+
     [Header("Server Identity")] public string serverId;
-
 
     private WebSocket ws;
     private string publicIP = "";
 
-
-    public float heartbeatTime;
-
-    private WaitForSeconds _heartbeat;
+    public float heartbeatTime = 5f;
+    private WaitForSeconds heartbeatWait;
 
     public bool IsInitialized { get; private set; }
-
     public PerformanceTracker performanceTracker;
 
+    // ===============================
+    // RECONNECT STATE
+    // ===============================
+    private int reconnectAttempt;
+    private Coroutine reconnectRoutine;
+    private bool isQuitting;
+
+    private enum DisconnectReason
+    {
+        None,
+        ManualQuit,
+        ServerClosed,
+        NetworkError,
+        Unknown
+    }
+
+    private DisconnectReason lastDisconnectReason = DisconnectReason.None;
+
+    // ===============================
+    // UNITY LIFECYCLE
+    // ===============================
 
     private void Awake()
     {
-        IsInitialized = false;
-
-        _heartbeat = new WaitForSeconds(heartbeatTime);
+        heartbeatTime = Mathf.Max(heartbeatTime, 1f);
+        heartbeatWait = new WaitForSeconds(heartbeatTime);
 
         if (performanceTracker == null)
-        {
             performanceTracker = GetComponent<PerformanceTracker>();
-        }
     }
 
     public IEnumerator InitializeAndConnect()
     {
-        // 1. Get public IP first
         yield return StartCoroutine(GetPublicIP());
 
-        // 2. Set serverId
         serverId = $"unity_{publicIP.Replace(".", "_")}";
+        Debug.Log($"[Init] ServerID={serverId}, IP={publicIP}");
 
-        Debug.Log($"[Init] Server ID: {serverId}, Public IP: {publicIP}");
-
-        // 3. Connect to WebSocket
-        _ = Connect();
-
-        // 4. Start heartbeat
+        Connect();
         StartCoroutine(SendHeartbeat());
     }
 
-    // ================================================================
-    // GET PUBLIC IP
-    // ================================================================
+    // ===============================
+    // PUBLIC IP
+    // ===============================
 
     private IEnumerator GetPublicIP()
     {
-        Debug.Log("[IP] Fetching public IP...");
+        Debug.Log("[IP] 🌐 Fetching public IP...");
 
-        // Try primary service
-        UnityWebRequest request = UnityWebRequest.Get("https://api.ipify.org?format=text");
-        yield return request.SendWebRequest();
-
-        if (request.result == UnityWebRequest.Result.Success)
+        string[] services =
         {
-            publicIP = request.downloadHandler.text.Trim();
-            Debug.Log($"[IP] Public IP detected: {publicIP}");
-        }
-        else
-        {
-            Debug.LogWarning($"[IP] Primary service failed: {request.error}");
+            "https://api.ipify.org?format=text",
+            "https://checkip.amazonaws.com"
+        };
 
-            // Fallback to secondary service
-            request = UnityWebRequest.Get("https://checkip.amazonaws.com");
+        foreach (var url in services)
+        {
+            using UnityWebRequest request = UnityWebRequest.Get(url);
+            request.timeout = 5; // 🔒 important for servers
+
             yield return request.SendWebRequest();
 
             if (request.result == UnityWebRequest.Result.Success)
             {
                 publicIP = request.downloadHandler.text.Trim();
-                Debug.Log($"[IP] Public IP detected (fallback): {publicIP}");
+
+                if (!string.IsNullOrEmpty(publicIP))
+                {
+                    Debug.Log($"[IP] ✅ Public IP detected: {publicIP}");
+                    yield break;
+                }
             }
             else
             {
-                Debug.LogError($"[IP] Failed to get public IP: {request.error}");
-                publicIP = "unknown";
+                Debug.LogWarning($"[IP] ⚠️ Failed from {url}: {request.error}");
             }
         }
+
+        // If all services fail
+        publicIP = "unknown";
+        Debug.LogError("[IP] ❌ Could not determine public IP, using 'unknown'");
     }
 
-    // ================================================================
-    // WEBSOCKET CONNECTION
-    // ================================================================
 
-    private Task Connect()
+    // ===============================
+    // WEBSOCKET
+    // ===============================
+
+    private void Connect()
     {
         string wsUrl = $"{backendWsUrl}{serverId}/";
-        Debug.Log($"[WebSocket] Connecting to {wsUrl}...");
 
         ws = new WebSocket(wsUrl);
+        Debug.Log($"[WebSocket] 🔌 Connecting → {wsUrl}");
 
-        ws.OnOpen += (sender, e) =>
+        ws.OnOpen += (s, e) =>
         {
             IsInitialized = true;
+            reconnectAttempt = 0;
+            lastDisconnectReason = DisconnectReason.None;
+
             Debug.Log($"[WebSocket] ✅ Connected as {serverId}");
         };
 
-        ws.OnMessage += (sender, e) =>
-        {
-            Debug.Log($"[WebSocket] ⬇ Received: {e.Data}");
-            HandleMessage(e.Data);
-        };
+        ws.OnMessage += (s, e) => { MainThreadDispatcher.Enqueue(() => { HandleMessage(e.Data); }); };
 
-        ws.OnError += (sender, e) => { Debug.LogError($"[WebSocket] ❌ Error: {e.Message}"); };
+        ws.OnError += (s, e) => { Debug.LogError($"[WebSocket] ❌ Error: {e.Message}"); };
 
-        ws.OnClose += (sender, e) =>
+        ws.OnClose += (s, e) =>
         {
             IsInitialized = false;
-            Debug.LogWarning($"[WebSocket] Disconnected. Code: {e.Code}, Reason: {e.Reason}");
+
+            lastDisconnectReason = e.Code switch
+            {
+                1000 => DisconnectReason.ManualQuit,
+                1001 => DisconnectReason.ServerClosed,
+                1006 => DisconnectReason.NetworkError,
+                _ => DisconnectReason.Unknown
+            };
+
+            Debug.LogWarning(
+                $"[WebSocket] ❌ Disconnected | Code={e.Code}, Reason={e.Reason}, Type={lastDisconnectReason}"
+            );
+
+            if (!isQuitting)
+                ScheduleReconnect();
         };
 
         ws.Connect();
-        return Task.CompletedTask;
     }
 
-    // ================================================================
-    // MESSAGE HANDLING (Django → Unity)
-    // ================================================================
+    // ===============================
+    // RECONNECT LOGIC
+    // ===============================
+
+    private void ScheduleReconnect()
+    {
+        if (reconnectRoutine != null)
+            StopCoroutine(reconnectRoutine);
+
+        reconnectRoutine = StartCoroutine(ReconnectRoutine());
+    }
+
+    private IEnumerator ReconnectRoutine()
+    {
+        reconnectAttempt++;
+        float delay = Mathf.Min(5f * reconnectAttempt, 30f);
+
+        Debug.Log($"[WebSocket] 🔄 Reconnect attempt {reconnectAttempt} in {delay}s");
+        yield return new WaitForSeconds(delay);
+
+        if (isQuitting) yield break;
+
+        Debug.Log("[WebSocket] 🔁 Reconnecting...");
+        try
+        {
+            ws?.Close();
+            Connect();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"[WebSocket] ❌ Reconnect failed: {ex.Message}");
+            ScheduleReconnect();
+        }
+    }
+
+    // ===============================
+    // MESSAGE HANDLING
+    // ===============================
 
     private void HandleMessage(string message)
     {
         try
         {
             JObject data = JObject.Parse(message);
-            string messageType = data["type"]?.ToString();
+            string type = data["type"]?.ToString();
 
-            switch (messageType)
+            switch (type)
             {
                 case "assign_job":
-                    OnJobAssignment(data);
+                    HandleJob(data);
                     break;
 
                 case "command":
-                    OnCommandReceived(data);
+                    HandleCommand(data);
                     break;
 
                 default:
-                    Debug.LogWarning($"[WebSocket] Unknown message type: {messageType}");
+                    Debug.LogWarning($"[WebSocket] Unknown message type: {type}");
                     break;
             }
         }
         catch (Exception ex)
         {
-            Debug.LogError($"[WebSocket] Failed to parse message: {ex.Message}");
+            Debug.LogError($"[WebSocket] Parse error: {ex.Message}");
         }
     }
 
-    private void OnJobAssignment(JObject data)
+    private void HandleJob(JObject data)
     {
-        if (PinoWorldManager.Instance.IsSystemBusy)
+        PlanetCalculateOrder order = new PlanetCalculateOrder
         {
-            Debug.LogWarning("[Job] Already processing, ignoring new assignment");
-            return;
-        }
-
-
-        PlanetCalculateOrder _PlanetCalculateOrder = new PlanetCalculateOrder()
-        {
-            planetId = int.Parse(data["map_id"]?.ToString() ?? string.Empty),
-            roundId = data["round_id"]?.ToObject<int>() ?? 0,
+            planetId = data["map_id"]?.ToObject<int>() ?? 0,
             seasonId = data["season_id"]?.ToObject<int>() ?? 0,
+            roundId = data["round_id"]?.ToObject<int>() ?? 0
         };
 
-
-        if (_PlanetCalculateOrder.planetId <= 0)
+        if (order.planetId <= 0)
         {
-            Debug.Log("Invalid mapId");
+            Debug.LogError("[Job] Invalid planetId");
             return;
         }
 
-        if (_PlanetCalculateOrder.roundId <= 0)
+        Debug.Log($"[Job] 📋 Assigned planet {order.planetId}");
+
+        MainThreadDispatcher.Enqueue(async () =>
         {
-            Debug.Log("Invalid roundId");
-            return;
-        }
-
-        if (_PlanetCalculateOrder.seasonId <= 0)
-        {
-            Debug.Log("Invalid seasonId");
-            return;
-        }
-
-        Debug.Log($"[Job] 📋 Assigned: Map {_PlanetCalculateOrder.planetId}, Season {_PlanetCalculateOrder.seasonId}, Round {_PlanetCalculateOrder.roundId}");
-
-        // Update status to busy
-        SendStatusUpdate("busy");
-
-        // Start processing
-        _ = PinoWorldManager.Instance.OnPlanetCalculateOrderReceive(_PlanetCalculateOrder);
+            try
+            {
+                await PinoWorldManager.Instance.OnPlanetCalculateOrderReceive(order);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogException(ex);
+                SendFailed(order.planetId, ex.Message);
+            }
+        });
     }
 
-    private void OnCommandReceived(JObject data)
+    private void HandleCommand(JObject data)
     {
         string command = data["command"]?.ToString();
-        Debug.Log($"[Command] Received: {command}");
+        Debug.Log($"[Command] {command}");
 
-        // Handle commands like restart_server, stop_server, etc.
-        switch (command)
-        {
-            case "restart_server":
-                Debug.Log("[Command] Restarting server...");
-                // Implement restart logic
-                break;
-
-            case "stop_server":
-                Debug.Log("[Command] Stopping server...");
-                Application.Quit();
-                break;
-        }
+        if (command == "stop_server")
+            Application.Quit();
     }
 
-
-    // ================================================================
-    // WEBSOCKET MESSAGES (Unity → Django)
-    // ================================================================
+    // ===============================
+    // HEARTBEAT
+    // ===============================
 
     private IEnumerator SendHeartbeat()
     {
         while (Application.isPlaying)
         {
-            yield return _heartbeat;
+            yield return heartbeatWait;
 
             if (ws != null && ws.IsAlive)
             {
-                JObject message = new JObject
+                JObject msg = new JObject
                 {
                     ["type"] = "heartbeat",
                     ["idle_cpu"] = performanceTracker.idlePeakCPU,
@@ -251,107 +285,90 @@ public class UnityWebSocketClient : MonoBehaviour
                     ["disk"] = performanceTracker.currentDisk
                 };
 
-                ws.Send(message.ToString());
+                ws.Send(msg.ToString());
             }
         }
     }
+
+    // ===============================
+    // OUTGOING MESSAGES
+    // ===============================
 
     public void SendStatusUpdate(string status)
     {
         if (ws == null || !ws.IsAlive) return;
 
-        JObject message = new JObject
+        ws.Send(new JObject
         {
             ["type"] = "status_update",
             ["status"] = status
-        };
-
-        ws.Send(message.ToString());
-        Debug.Log($"[Status] 🔄 Changed to: {status}");
+        }.ToString());
     }
 
-    public void SendJobDone(int planetID, DateTime nextRoundTime, string tilesJson)
+    public void SendJobDone(string mapId, DateTime nextRoundTime)
     {
         if (ws == null || !ws.IsAlive) return;
 
-        JObject message = new JObject
+        ws.Send(new JObject
         {
             ["type"] = "job_done",
-            ["planet_id"] = planetID,
-            ["next_calculation_time"] = nextRoundTime,
-            ["tiles_json"] = tilesJson
-        };
+            ["map_id"] = mapId,
+            ["next_round_time"] = nextRoundTime.ToString("O")  // ISO 8601 format
+        }.ToString());
 
-        ws.Send(message.ToString());
-        Debug.Log($"[WebSocket] ⬆ Sent job_done for {planetID}");
+        Debug.Log($"[Job Done] ✅ Sent for {mapId}, next: {nextRoundTime:O}");
+
+        // Mark server as idle for new assignments
+        SendStatusUpdate("idle");
     }
 
-    public void SendError(string error)
+    public void SendFailed(int planetId, string cause)
     {
         if (ws == null || !ws.IsAlive) return;
 
-        JObject message = new JObject
+        ws.Send(new JObject
         {
             ["type"] = "error",
-            ["error"] = error
-        };
-
-        ws.Send(message.ToString());
-        Debug.LogError($"[Error] Sent: {error}");
-    }
-
-    public void SendFailed(int planetID, string cause)
-    {
-        if (ws == null || !ws.IsAlive) return;
-
-        JObject message = new JObject
-        {
-            ["type"] = "error",
-            ["planet_id"] = planetID,
+            ["planet_id"] = planetId,
             ["error"] = cause
-        };
-
-        ws.Send(message.ToString());
-        Debug.LogError($"[Failed] Sent: {cause}");
+        }.ToString());
     }
 
+    // ===============================
+    // CLEANUP
+    // ===============================
 
-    void SendDisconnect()
+    private void SendDisconnect()
     {
         if (ws == null || !ws.IsAlive) return;
 
-        JObject message = new JObject
+        Debug.Log("[WebSocket] 📤 Sending graceful disconnect");
+
+        ws.Send(new JObject
         {
             ["type"] = "disconnect",
             ["server_id"] = serverId
-        };
-
-        ws.Send(message.ToString());
+        }.ToString());
     }
 
-    // ================================================================
-    // CLEANUP
-    // ================================================================
-
-    void OnApplicationQuit()
+    private void OnApplicationQuit()
     {
+        isQuitting = true;
+        lastDisconnectReason = DisconnectReason.ManualQuit;
         SendDisconnect();
         ws?.Close();
     }
 
-    private void OnDisable()
+    private void OnDestroy()
     {
-        SendDisconnect();
-        ws?.Close();
-    }
-
-    void OnDestroy()
-    {
-        SendDisconnect();
+        isQuitting = true;
         ws?.Close();
     }
 }
 
+// ===============================
+// DATA MODEL
+// ===============================
 
 public class PlanetCalculateOrder
 {

@@ -32,7 +32,7 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         await self.register_server()
 
         print(f"[WebSocket] ✅ Server {self.server_id} connected and registered as idle")
-        
+
         # Trigger immediate assignment check
         await self.trigger_assignment()
 
@@ -67,6 +67,7 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
 
         if message_type == 'heartbeat':
             await self.handle_heartbeat(content)
+
         elif message_type == 'status_update':
             await self.handle_status_update(content)
 
@@ -120,20 +121,27 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         Update server status (idle/busy)
         Unity sends when starting/finishing jobs
         """
+        import logging
+        logger = logging.getLogger(__name__)
         status = data.get('status')
 
         try:
             UnityServer.objects.filter(server_id=self.server_id).update(
                 status=status
             )
-            print(f"[Status] {self.server_id} → {status}")
-            
-            if status == 'idle':
-                # Trigger immediate assignment check
-                from .assignment_service import assign_available_maps
-                assign_available_maps()
+            logger.info(f"[Status] {self.server_id} → {status}")
         except Exception as e:
-            print(f"[Status] ❌ Error: {e}")
+            logger.error(f"[Status] Error: {e}")
+
+    async def handle_status_update_wrapper(self, data):
+        """
+        Wrapper to handle status update and trigger assignment asynchronously.
+        """
+        await self.handle_status_update(data)
+
+        # Trigger assignment if server became idle
+        if data.get('status') == 'idle':
+            await self.trigger_assignment()
 
     @database_sync_to_async
     def handle_job_done(self, data):
@@ -141,6 +149,8 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         Process job completion from Unity
         Triggers async Celery task to update DB and requeue
         """
+        import logging
+        logger = logging.getLogger(__name__)
         from .tasks import handle_job_completion
 
         try:
@@ -148,7 +158,7 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
             next_round_time = data.get('next_round_time')
 
             if not next_round_time:
-                print(f"[Job Done] ⚠ Missing next_round_time for {map_id}")
+                logger.warning(f"[Job Done] Missing next_round_time for {map_id}")
                 return
 
             # Trigger Celery task
@@ -157,14 +167,10 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
                 server_id=self.server_id,
                 next_round_time_str=next_round_time
             )
-            
-            # Trigger immediate assignment check (to use the now freed server)
-            from .assignment_service import assign_available_maps
-            assign_available_maps()
 
-            print(f"[Job Done] ✅ {self.server_id} completed {map_id}, next: {next_round_time}")
+            logger.info(f"[Job Done] {self.server_id} completed {map_id}, next: {next_round_time}")
         except Exception as e:
-            print(f"[Job Done] ❌ Error: {e}")
+            logger.error(f"[Job Done] Error: {e}")
 
     @database_sync_to_async
     def handle_error(self, data):
