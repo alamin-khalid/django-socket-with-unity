@@ -5,7 +5,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="3804a2bc-4c31-4889-a28a-14dba2ad9f31" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/server_orchestrator/asgi.py" beforeDir="false" afterPath="$PROJECT_DIR$/server_orchestrator/asgi.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

@@ -92,6 +92,7 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
+CELERY_TASK_ALWAYS_EAGER = True  # Run tasks immediately (useful for dev without worker)
 
 CELERY_BEAT_SCHEDULE = {
     'process-due-maps': {

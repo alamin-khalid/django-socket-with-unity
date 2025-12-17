@@ -15,54 +15,8 @@ def process_due_maps():
     Main scheduling loop - runs every 5 seconds.
     Checks for due maps and assigns to idle servers.
     """
-    # Get maps that are due for processing
-    due_map_ids = get_due_maps(limit=20)
-    
-    if not due_map_ids:
-        return "No due maps"
-    
-    logger.info(f"Found {len(due_map_ids)} due maps: {due_map_ids}")
-    
-    # Get idle servers ordered by total jobs completed (load balancing)
-    idle_servers = list(UnityServer.objects.filter(status='idle').order_by('total_completed_map'))
-    
-    if not idle_servers:
-        logger.warning(f"No idle servers available for {len(due_map_ids)} due maps")
-        return f"No idle servers for {len(due_map_ids)} due maps"
-    
-    assigned_count = 0
-    
-    for map_id in due_map_ids:
-        if not idle_servers:
-            logger.info("No more idle servers, stopping assignment")
-            break
-            
-        try:
-            # Get map object - must be in 'queued' status
-            map_obj = Planet.objects.get(map_id=map_id, status='queued')
-            
-            # Get next idle server
-            server = idle_servers.pop(0)
-            
-            # Assign job asynchronously
-            assign_job_to_server.delay(map_obj.map_id, server.id)
-            
-            # Remove from Redis queue
-            remove_from_queue(map_id)
-            
-            assigned_count += 1
-            logger.info(f"Assigned map {map_id} to server {server.server_id}")
-                
-        except Planet.DoesNotExist:
-            # Map was deleted or already processing
-            logger.warning(f"Map {map_id} not found or not queued, removing from queue")
-            remove_from_queue(map_id)
-            continue
-        except Exception as e:
-            logger.error(f"Error assigning map {map_id}: {e}")
-            continue
-    
-    return f"Assigned {assigned_count}/{len(due_map_ids)} maps to servers"
+    from .assignment_service import assign_available_maps
+    return assign_available_maps()
 
 @shared_task
 def assign_job_to_server(map_id: str, server_id: int):

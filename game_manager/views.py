@@ -72,10 +72,14 @@ def create_map(request):
         # Add to Redis queue for immediate processing
         try:
             add_map_to_queue(map_obj.map_id, map_obj.next_round_time)
+            
+            # Trigger assignment check immediately
+            from .assignment_service import assign_available_maps
+            assign_available_maps()
+            
         except Exception as e:
             # Log error but don't fail the request
-            print(f"Failed to add map {map_obj.map_id} to queue: {e}")
-            # Optionally we could add a warning to the response
+            print(f"Failed to add/assign map {map_obj.map_id}: {e}")
         
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     else:

@@ -32,6 +32,9 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         await self.register_server()
 
         print(f"[WebSocket] ✅ Server {self.server_id} connected and registered as idle")
+        
+        # Trigger immediate assignment check
+        await self.trigger_assignment()
 
     async def disconnect(self, close_code):
         """Called when Unity closes connection"""
@@ -124,6 +127,11 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
                 status=status
             )
             print(f"[Status] {self.server_id} → {status}")
+            
+            if status == 'idle':
+                # Trigger immediate assignment check
+                from .assignment_service import assign_available_maps
+                assign_available_maps()
         except Exception as e:
             print(f"[Status] ❌ Error: {e}")
 
@@ -149,6 +157,10 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
                 server_id=self.server_id,
                 next_round_time_str=next_round_time
             )
+            
+            # Trigger immediate assignment check (to use the now freed server)
+            from .assignment_service import assign_available_maps
+            assign_available_maps()
 
             print(f"[Job Done] ✅ {self.server_id} completed {map_id}, next: {next_round_time}")
         except Exception as e:
@@ -252,6 +264,19 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
             print(f"[Register] Server registered: {self.server_id} ({server_ip})")
         except Exception as e:
             print(f"[Register] ❌ Error: {e}")
+
+    async def trigger_assignment(self):
+        """
+        Trigger assignment check
+        """
+        try:
+            from .assignment_service import assign_available_maps
+            # Run synchronous assignment logic in thread
+            result = await database_sync_to_async(assign_available_maps)()
+            if result and "Assigned" in str(result) and "0" not in str(result):
+                print(f"[Assignment] ⚡ Triggered: {result}")
+        except Exception as e:
+            print(f"[Assignment] ❌ Error triggering assignment: {e}")
 
     @database_sync_to_async
     def mark_server_offline(self):
