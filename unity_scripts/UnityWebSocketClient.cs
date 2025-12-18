@@ -9,8 +9,8 @@ using System.Threading.Tasks;
 [RequireComponent(typeof(PerformanceTracker))]
 public class UnityWebSocketClient : MonoBehaviour
 {
-    // [Header("Backend Configuration")] public string backendWsUrl = "ws://103.12.214.244/ws/server/";
-    [Header("Backend Configuration")] public string backendWsUrl = "ws://127.0.0.1:8000/ws/server/";
+    // private string backendWsUrl = "ws://103.12.214.244/ws/server/";
+    private string backendWsUrl = "ws://127.0.0.1:8000/ws/server/";
 
 
     [Header("Server Identity")] public string serverId;
@@ -55,19 +55,38 @@ public class UnityWebSocketClient : MonoBehaviour
             performanceTracker = GetComponent<PerformanceTracker>();
     }
 
+
     public IEnumerator InitializeAndConnect()
     {
         yield return StartCoroutine(GetPublicIP());
-
         serverId = $"unity_{publicIP.Replace(".", "_")}";
-        Debug.Log($"[Init] ServerID={serverId}, IP={publicIP}");
 
         Connect();
         StartCoroutine(SendHeartbeat());
+
+        // Wait for connection
+        yield return new WaitUntil(() => IsInitialized);
+
+        // Backend already marked as 'not_initialized'
+        Debug.Log("[Init] Server connected, initializing systems...");
+
+        // Do your initialization (load assets, etc.)
+        yield return StartCoroutine(InitializeGameSystems());
+
+        // NOW mark as idle - ready for jobs!
+        SendStatusUpdate("idle");
+        Debug.Log("[Init] ✅ Server ready to receive jobs");
     }
 
+    private IEnumerator InitializeGameSystems()
+    {
+        // Your initialization logic here
+        yield return new WaitUntil(() => PinoWorldManager.Instance.IsSystemReady);
+    }
+
+
     // ===============================
-    // PUBLIC IP
+    // GET PUBLIC IP
     // ===============================
 
     private IEnumerator GetPublicIP()
@@ -201,7 +220,7 @@ public class UnityWebSocketClient : MonoBehaviour
         {
             JObject data = JObject.Parse(message);
             string type = data["type"]?.ToString();
-
+            Debug.Log("Comand: " + type);
             switch (type)
             {
                 case "assign_job":
@@ -305,15 +324,24 @@ public class UnityWebSocketClient : MonoBehaviour
         }.ToString());
     }
 
-    public void SendJobDone(string mapId, DateTime nextRoundTime)
+    public void SendJobDone(int mapId, string nextRoundTimeStr)
     {
         if (ws == null || !ws.IsAlive) return;
+
+        // Parse the datetime string as UTC
+        DateTime nextRoundTime = DateTime.ParseExact(
+            nextRoundTimeStr,
+            "yyyy-MM-dd HH:mm:ss",
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AssumeUniversal | 
+            System.Globalization.DateTimeStyles.AdjustToUniversal
+        );
 
         ws.Send(new JObject
         {
             ["type"] = "job_done",
-            ["map_id"] = mapId,
-            ["next_round_time"] = nextRoundTime.ToString("O")  // ISO 8601 format
+            ["map_id"] = mapId.ToString(),  // Convert to string for Django CharField
+            ["next_round_time"] = nextRoundTime.ToString("O")  // ISO 8601 format with Z suffix
         }.ToString());
 
         Debug.Log($"[Job Done] ✅ Sent for {mapId}, next: {nextRoundTime:O}");

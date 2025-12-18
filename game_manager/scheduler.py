@@ -23,10 +23,12 @@ def assignment_loop():
         try:
             from .assignment_service import assign_available_maps
             result = assign_available_maps()
+            # Log all results for debugging
+            logger.debug(f"[Scheduler] Check result: {result}")
             if result and "No" not in str(result):
                 logger.info(f"[Scheduler] {result}")
         except Exception as e:
-            logger.error(f"[Scheduler] Error: {e}")
+            logger.error(f"[Scheduler] Error: {e}", exc_info=True)
         
         time.sleep(1)  # Check every second
     
