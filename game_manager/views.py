@@ -246,9 +246,32 @@ class DashboardView(View):
             'offline_servers': offline_servers,
             'not_init_servers': not_init_servers,
             'total_servers': servers.count(),
+            # Current server time
+            'server_time': timezone.now(),
         }
         
         return render(request, 'game_manager/dashboard.html', context)
+
+
+@api_view(['POST'])
+def force_assign(request):
+    """
+    POST /api/force-assign/
+    Manually trigger map assignment to idle servers.
+    """
+    try:
+        from .assignment_service import assign_available_maps
+        result = assign_available_maps()
+        return Response({
+            'status': 'success',
+            'result': str(result)
+        })
+    except Exception as e:
+        return Response({
+            'status': 'error',
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 # ============================================================================
 # Command Views (for manual server control)

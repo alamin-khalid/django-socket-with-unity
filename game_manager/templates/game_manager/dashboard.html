@@ -269,6 +269,21 @@
             background-color: #e67e22;
         }
 
+        .btn-assign {
+            background-color: #9b59b6;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            width: 100%;
+        }
+
+        .btn-assign:hover {
+            background-color: #8e44ad;
+        }
+
         .text-muted {
             color: var(--text-muted);
         }
@@ -283,14 +298,128 @@
             font-size: 12px;
             color: var(--text-secondary);
         }
+
+        .countdown {
+            font-size: 13px;
+            font-weight: 600;
+            color: #27ae60;
+        }
+
+        .countdown.overdue {
+            color: #e74c3c;
+        }
+
+        .refresh-control {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            background: var(--bg-card);
+            padding: 8px 16px;
+            border-radius: 20px;
+            box-shadow: 0 2px 4px var(--shadow);
+        }
+
+        /* Modern Toggle Switch */
+        .toggle-switch {
+            position: relative;
+            width: 44px;
+            height: 24px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: 0.3s;
+            border-radius: 24px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: 0.3s;
+            border-radius: 50%;
+        }
+
+        .toggle-switch input:checked+.toggle-slider {
+            background-color: #9b59b6;
+        }
+
+        .toggle-switch input:checked+.toggle-slider:before {
+            transform: translateX(20px);
+        }
+
+        .refresh-slider {
+            width: 150px;
+            cursor: pointer;
+            height: 6px;
+            -webkit-appearance: none;
+            background: var(--border-color);
+            border-radius: 3px;
+            outline: none;
+        }
+
+        .refresh-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #9b59b6;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .refresh-slider:disabled {
+            opacity: 0.4;
+        }
+
+        .refresh-label {
+            min-width: 40px;
+            font-weight: 600;
+            color: var(--text-primary);
+            background: var(--border-color);
+            padding: 4px 8px;
+            border-radius: 12px;
+            text-align: center;
+        }
     </style>
 </head>
 
 <body>
     <div class="container">
-        <div class="header">
-            <h1>🎮 Unity Server Orchestrator Dashboard</h1>
-            <button class="theme-toggle" onclick="toggleTheme()">🌙 Night Mode</button>
+        <div class="header" style="flex-direction: column; align-items: flex-end;">
+            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <h1>🎮 Server Orchestrator Dashboard</h1>
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <span class="timestamp">🕐 Server: {{ server_time|date:"Y-m-d H:i:s" }}</span>
+                    <button class="theme-toggle" onclick="toggleTheme()">🌙 Night Mode</button>
+                </div>
+            </div>
+            <div class="refresh-control" style="margin-top: 10px;">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="refreshEnabled" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+                <span>Auto-refresh</span>
+                <input type="range" class="refresh-slider" id="refreshSlider" min="2" max="120" value="10">
+                <span class="refresh-label" id="refreshLabel">10s</span>
+            </div>
         </div>
 
         <!-- Statistics Cards -->
@@ -299,6 +428,7 @@
                 <h3>Queue Size</h3>
                 <div class="value">{{ queue_size }}</div>
                 <div class="subtext">Pending maps</div>
+                <button class="btn-assign" onclick="forceAssign()" style="margin-top: 10px;">⚡ Force Assign</button>
             </div>
 
             <div class="stat-card success">
@@ -331,7 +461,11 @@
                         <th>Status</th>
                         <th>Last Heartbeat</th>
                         <th>Current Task</th>
+                        <th>CPU (idle→max)</th>
+                        <th>RAM (idle→max)</th>
+                        <th>Disk</th>
                         <th>Completed</th>
+                        <th>Failed</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -354,7 +488,17 @@
                             <span class="text-muted">-</span>
                             {% endif %}
                         </td>
+                        <td>{{ server.idle_cpu_usage|floatformat:0 }}% → {{ server.max_cpu_usage|floatformat:0 }}%</td>
+                        <td>{{ server.idle_ram_usage|floatformat:0 }}% → {{ server.max_ram_usage|floatformat:0 }}%</td>
+                        <td>{{ server.disk_usage|floatformat:1 }}%</td>
                         <td>{{ server.total_completed_map }} / {{ server.total_assigned_map }}</td>
+                        <td>
+                            {% if server.total_failed_map > 0 %}
+                            <span style="color: #e74c3c; font-weight: bold;">{{ server.total_failed_map }}</span>
+                            {% else %}
+                            <span class="text-muted">0</span>
+                            {% endif %}
+                        </td>
                         <td>
                             <button class="btn-restart"
                                 onclick="sendCommand('{{ server.server_id }}', 'restart_server')">Restart</button>
@@ -366,7 +510,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="6" class="no-data">No servers connected</td>
+                        <td colspan="10" class="no-data">No servers connected</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -391,7 +535,11 @@
                     <tr>
                         <td><strong>{{ map.map_id }}</strong></td>
                         <td><span class="badge {{ map.status }}">{{ map.status }}</span></td>
-                        <td class="timestamp">{{ map.next_round_time }}</td>
+                        <td>
+                            <span class="timestamp">{{ map.next_round_time|date:"Y-m-d H:i:s" }}</span>
+                            <br><span class="countdown"
+                                data-target="{{ map.next_round_time.isoformat }}">--:--:--</span>
+                        </td>
                         <td>S{{ map.season_id }} / R{{ map.round_id }}</td>
                         <td>
                             {% if map.processing_server %}
@@ -492,6 +640,28 @@
                 });
         }
 
+        function forceAssign() {
+            fetch('/api/force-assign/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        location.reload();
+                    } else {
+                        alert('Error: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Failed to trigger assignment');
+                });
+        }
+
         // Theme toggle function
         function toggleTheme() {
             document.body.classList.toggle('dark-mode');
@@ -529,8 +699,64 @@
             }
         });
 
-        // Auto-refresh every 5 seconds
-        setTimeout(() => location.reload(), 5000);
+        // Real-time countdown timer
+        function updateCountdowns() {
+            document.querySelectorAll('.countdown').forEach(el => {
+                const target = new Date(el.dataset.target);
+                const now = new Date();
+                const diff = target - now;
+
+                if (diff <= 0) {
+                    el.textContent = 'READY';
+                    el.classList.add('overdue');
+                } else {
+                    const hours = Math.floor(diff / (1000 * 60 * 60));
+                    const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                    const secs = Math.floor((diff % (1000 * 60)) / 1000);
+                    el.textContent = `${hours}h ${mins}m ${secs}s`;
+                    el.classList.remove('overdue');
+                }
+            });
+        }
+        updateCountdowns();
+        setInterval(updateCountdowns, 1000);
+
+        // Auto-refresh slider control
+        const slider = document.getElementById('refreshSlider');
+        const label = document.getElementById('refreshLabel');
+        const enabledCheckbox = document.getElementById('refreshEnabled');
+        let refreshTimer = null;
+
+        function setRefreshInterval(seconds, enabled = true) {
+            if (refreshTimer) clearTimeout(refreshTimer);
+            label.textContent = seconds + 's';
+            localStorage.setItem('refreshInterval', seconds);
+            localStorage.setItem('refreshEnabled', enabled);
+
+            if (enabled) {
+                refreshTimer = setTimeout(() => location.reload(), seconds * 1000);
+                slider.disabled = false;
+                slider.style.opacity = '1';
+            } else {
+                slider.disabled = true;
+                slider.style.opacity = '0.5';
+            }
+        }
+
+        // Load saved preferences
+        const savedInterval = localStorage.getItem('refreshInterval') || 10;
+        const savedEnabled = localStorage.getItem('refreshEnabled') !== 'false';
+        slider.value = savedInterval;
+        enabledCheckbox.checked = savedEnabled;
+        setRefreshInterval(parseInt(savedInterval), savedEnabled);
+
+        slider.addEventListener('input', (e) => {
+            setRefreshInterval(parseInt(e.target.value), enabledCheckbox.checked);
+        });
+
+        enabledCheckbox.addEventListener('change', (e) => {
+            setRefreshInterval(parseInt(slider.value), e.target.checked);
+        });
     </script>
 </body>
 

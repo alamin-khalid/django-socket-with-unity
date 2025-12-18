@@ -19,3 +19,10 @@ class GameManagerConfig(AppConfig):
                 reset_all_servers_offline()
             except Exception as e:
                 print(f"Error in startup cleanup: {e}")
+            
+            # Start background assignment scheduler (runs every second)
+            try:
+                from .scheduler import start_scheduler
+                start_scheduler()
+            except Exception as e:
+                print(f"Error starting scheduler: {e}")

@@ -10,4 +10,5 @@ urlpatterns = [
     path('server/<str:server_id>/', views.server_detail, name='server_detail'),
     path('queue/', views.queue_status, name='queue_status'),
     path('command/', views.send_server_command, name='send_command'),
+    path('force-assign/', views.force_assign, name='force_assign'),
 ]
