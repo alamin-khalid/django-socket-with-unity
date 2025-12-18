@@ -144,6 +144,12 @@
         }
 
         /* Tables */
+        .table-wrapper {
+            overflow-x: auto;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
@@ -163,6 +169,9 @@
             font-weight: 600;
             font-size: 13px;
             text-transform: uppercase;
+            position: sticky;
+            top: 0;
+            z-index: 10;
         }
 
         tr:hover {
@@ -371,6 +380,7 @@
             cursor: pointer;
             height: 6px;
             -webkit-appearance: none;
+            appearance: none;
             background: var(--border-color);
             border-radius: 3px;
             outline: none;
@@ -454,159 +464,171 @@
         <!-- Servers Section -->
         <div class="section">
             <h2>🖥️ Game Servers ({{total_servers}})</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Server ID</th>
-                        <th>Status</th>
-                        <th>Last Heartbeat</th>
-                        <th>Current Task</th>
-                        <th>CPU (idle→max)</th>
-                        <th>RAM (idle→max)</th>
-                        <th>Disk</th>
-                        <th>Completed</th>
-                        <th>Failed</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for server in servers %}
-                    <tr>
-                        <td><strong>{{ server.server_id }}</strong></td>
-                        <td><span class="badge {{ server.status }}">{{ server.status }}</span></td>
-                        <td class="timestamp">
-                            {% if server.last_heartbeat %}
-                            {{ server.last_heartbeat|timesince }} ago
-                            {% else %}
-                            <span class="text-muted">Never</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if server.current_task %}
-                            <strong>Map {{ server.current_task.map_id }}</strong>
-                            {% else %}
-                            <span class="text-muted">-</span>
-                            {% endif %}
-                        </td>
-                        <td>{{ server.idle_cpu_usage|floatformat:0 }}% → {{ server.max_cpu_usage|floatformat:0 }}%</td>
-                        <td>{{ server.idle_ram_usage|floatformat:0 }}% → {{ server.max_ram_usage|floatformat:0 }}%</td>
-                        <td>{{ server.disk_usage|floatformat:1 }}%</td>
-                        <td>{{ server.total_completed_map }} / {{ server.total_assigned_map }}</td>
-                        <td>
-                            {% if server.total_failed_map > 0 %}
-                            <span style="color: #e74c3c; font-weight: bold;">{{ server.total_failed_map }}</span>
-                            {% else %}
-                            <span class="text-muted">0</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <button class="btn-restart"
-                                onclick="sendCommand('{{ server.server_id }}', 'restart_server')">Restart</button>
-                            {% if server.status == 'busy' %}
-                            <button class="btn-cancel"
-                                onclick="sendCommand('{{ server.server_id }}', 'stop_game')">Cancel</button>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="10" class="no-data">No servers connected</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Server ID</th>
+                            <th>Status</th>
+                            <th>Last Heartbeat</th>
+                            <th>Current Task</th>
+                            <th>CPU (idle→max)</th>
+                            <th>RAM (idle→max)</th>
+                            <th>Disk</th>
+                            <th>Completed</th>
+                            <th>Failed</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for server in servers %}
+                        <tr>
+                            <td><strong>{{ server.server_id }}</strong></td>
+                            <td><span class="badge {{ server.status }}">{{ server.status }}</span></td>
+                            <td class="timestamp">
+                                {% if server.last_heartbeat %}
+                                {{ server.last_heartbeat|timesince }} ago
+                                {% else %}
+                                <span class="text-muted">Never</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if server.current_task %}
+                                <strong>Map {{ server.current_task.map_id }}</strong>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ server.idle_cpu_usage|floatformat:0 }}% → {{ server.max_cpu_usage|floatformat:0 }}%
+                            </td>
+                            <td>{{ server.idle_ram_usage|floatformat:0 }}% → {{ server.max_ram_usage|floatformat:0 }}%
+                            </td>
+                            <td>{{ server.disk_usage|floatformat:1 }}%</td>
+                            <td>{{ server.total_completed_map }} / {{ server.total_assigned_map }}</td>
+                            <td>
+                                {% if server.total_failed_map > 0 %}
+                                <span style="color: #e74c3c; font-weight: bold;">{{ server.total_failed_map }}</span>
+                                {% else %}
+                                <span class="text-muted">0</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button class="btn-restart"
+                                    onclick="sendCommand('{{ server.server_id }}', 'restart_server')">Restart</button>
+                                {% if server.status == 'busy' %}
+                                <button class="btn-cancel"
+                                    onclick="sendCommand('{{ server.server_id }}', 'stop_game')">Cancel</button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="10" class="no-data">No servers connected</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- Maps Queue Section -->
         <div class="section">
             <h2>🗺️ Map Queue / Active Tasks ({{ maps|length }})</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Map ID</th>
-                        <th>Status</th>
-                        <th>Next Round Time</th>
-                        <th>Season/Round</th>
-                        <th>Processing Server</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for map in maps %}
-                    <tr>
-                        <td><strong>{{ map.map_id }}</strong></td>
-                        <td><span class="badge {{ map.status }}">{{ map.status }}</span></td>
-                        <td>
-                            <span class="timestamp">{{ map.next_round_time|date:"Y-m-d H:i:s" }}</span>
-                            <br><span class="countdown"
-                                data-target="{{ map.next_round_time.isoformat }}">--:--:--</span>
-                        </td>
-                        <td>S{{ map.season_id }} / R{{ map.round_id }}</td>
-                        <td>
-                            {% if map.processing_server %}
-                            {{ map.processing_server.server_id }}
-                            {% else %}
-                            <span class="text-muted">-</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="5" class="no-data">No active maps</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Map ID</th>
+                            <th>Status</th>
+                            <th>Next Round Time</th>
+                            <th>Season/Round</th>
+                            <th>Processing Server</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for map in maps %}
+                        <tr>
+                            <td><strong>{{ map.map_id }}</strong></td>
+                            <td><span class="badge {{ map.status }}">{{ map.status }}</span></td>
+                            <td>
+                                <span class="timestamp">{{ map.next_round_time|date:"Y-m-d H:i:s" }}</span>
+                                <br><span class="countdown"
+                                    data-target="{{ map.next_round_time.isoformat }}">--:--:--</span>
+                            </td>
+                            <td>S{{ map.season_id }} / R{{ map.round_id }}</td>
+                            <td>
+                                {% if map.processing_server %}
+                                {{ map.processing_server.server_id }}
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="no-data">No active maps</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- Task History Section -->
         <div class="section">
-            <h2>📊 Task History (Recent 50)</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Map ID</th>
-                        <th>Server</th>
-                        <th>Status</th>
-                        <th>Started</th>
-                        <th>Duration</th>
-                        <th>Error</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for task in recent_tasks %}
-                    <tr>
-                        <td><strong>{{ task.map.map_id }}</strong></td>
-                        <td>
-                            {% if task.server %}
-                            {{ task.server.server_id }}
-                            {% else %}
-                            <span class="text-muted">Unknown</span>
-                            {% endif %}
-                        </td>
-                        <td><span class="badge {{ task.status }}">{{ task.status }}</span></td>
-                        <td class="timestamp">{{ task.start_time|timesince }} ago</td>
-                        <td>
-                            {% if task.duration_seconds %}
-                            {{ task.duration_seconds|floatformat:2 }}s
-                            {% else %}
-                            <span class="text-muted">-</span>
-                            {% endif %}
-                        </td>
-                        <td class="text-muted">
-                            {% if task.error_message %}
-                            {{ task.error_message|truncatewords:8 }}
-                            {% else %}
-                            -
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="6" class="no-data">No task history available</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+            <h2 style="display: flex; justify-content: space-between; align-items: center;">
+                <span>📊 Task History (Recent 50)</span>
+                <a href="/task-history/"
+                    style="font-size: 14px; color: #9b59b6; text-decoration: none; font-weight: normal;">View All →</a>
+            </h2>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Map ID</th>
+                            <th>Server</th>
+                            <th>Status</th>
+                            <th>Started</th>
+                            <th>Duration</th>
+                            <th>Error</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for task in recent_tasks %}
+                        <tr>
+                            <td><strong>{{ task.map.map_id }}</strong></td>
+                            <td>
+                                {% if task.server %}
+                                {{ task.server.server_id }}
+                                {% else %}
+                                <span class="text-muted">Unknown</span>
+                                {% endif %}
+                            </td>
+                            <td><span class="badge {{ task.status }}">{{ task.status }}</span></td>
+                            <td class="timestamp">{{ task.start_time|timesince }} ago</td>
+                            <td>
+                                {% if task.duration_seconds %}
+                                {{ task.duration_seconds|floatformat:2 }}s
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-muted">
+                                {% if task.error_message %}
+                                {{ task.error_message|truncatewords:8 }}
+                                {% else %}
+                                -
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="no-data">No task history available</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 

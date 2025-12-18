@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task History - Game Server Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #f5f7fa;
+            --bg-card: white;
+            --text-primary: #2c3e50;
+            --text-secondary: #7f8c8d;
+            --text-muted: #95a5a6;
+            --border-color: #ecf0f1;
+            --th-bg: #f8f9fa;
+            --shadow: rgba(0, 0, 0, 0.1);
+            --accent: #9b59b6;
+        }
+
+        body.dark-mode {
+            --bg-primary: #1a1a2e;
+            --bg-card: #16213e;
+            --text-primary: #e8e8e8;
+            --text-secondary: #a0a0a0;
+            --text-muted: #6c6c6c;
+            --border-color: #2a2a4a;
+            --th-bg: #1f1f3a;
+            --shadow: rgba(0, 0, 0, 0.3);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: var(--bg-primary);
+            padding: 20px;
+            transition: background 0.3s ease, color 0.3s ease;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        h1 {
+            color: var(--text-primary);
+            font-size: 28px;
+        }
+
+        .back-link {
+            color: var(--accent);
+            text-decoration: none;
+            font-size: 14px;
+            padding: 8px 16px;
+            border: 1px solid var(--accent);
+            border-radius: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .back-link:hover {
+            background: var(--accent);
+            color: white;
+        }
+
+        .theme-toggle {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            color: var(--text-primary);
+            transition: all 0.3s ease;
+        }
+
+        .theme-toggle:hover {
+            transform: scale(1.05);
+        }
+
+        /* Search and Controls */
+        .controls {
+            background: var(--bg-card);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px var(--shadow);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .search-box {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 1;
+            min-width: 250px;
+        }
+
+        .search-input {
+            flex: 1;
+            padding: 10px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 14px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            outline: none;
+            transition: border-color 0.3s ease;
+        }
+
+        .search-input:focus {
+            border-color: var(--accent);
+        }
+
+        .search-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .page-size-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .page-size-control label {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .page-size-select {
+            padding: 8px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        /* Stats bar */
+        .stats-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        /* Table Section */
+        .section {
+            background: var(--bg-card);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px var(--shadow);
+            transition: background 0.3s ease;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            text-align: left;
+            padding: 12px 10px;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+
+        th {
+            background-color: var(--th-bg);
+            color: var(--text-secondary);
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        tr:hover {
+            background-color: var(--th-bg);
+        }
+
+        /* Status Badges */
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: capitalize;
+        }
+
+        .badge.started {
+            background: #cce5ff;
+            color: #004085;
+        }
+
+        .badge.completed {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .badge.failed {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .badge.timeout {
+            background: #e2e3e5;
+            color: #383d41;
+        }
+
+        .text-muted {
+            color: var(--text-muted);
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 30px;
+            color: var(--text-muted);
+        }
+
+        .timestamp {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .error-cell {
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .error-cell:hover {
+            white-space: normal;
+            word-break: break-word;
+        }
+
+        /* Pagination */
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 5px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .pagination button {
+            padding: 8px 14px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-card);
+            color: var(--text-primary);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+
+        .pagination button:hover:not(:disabled) {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+
+        .pagination button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .pagination button.active {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+
+        .pagination .page-info {
+            padding: 8px 14px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        /* Highlight search matches */
+        .highlight {
+            background-color: #fff3cd;
+            padding: 1px 3px;
+            border-radius: 3px;
+        }
+
+        body.dark-mode .highlight {
+            background-color: #856404;
+            color: white;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-left">
+                <h1>📊 Task History</h1>
+                <a href="/dashboard/" class="back-link">← Back to Dashboard</a>
+            </div>
+            <button class="theme-toggle" onclick="toggleTheme()">🌙 Night Mode</button>
+        </div>
+
+        <div class="controls">
+            <div class="search-box">
+                <span>🔍</span>
+                <input type="text" class="search-input" id="searchInput"
+                    placeholder="Search by Map ID, Server, or Status...">
+            </div>
+            <div class="page-size-control">
+                <label>Show:</label>
+                <select class="page-size-select" id="pageSizeSelect">
+                    <option value="10">10</option>
+                    <option value="25" selected>25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                    <option value="all">All</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="stats-bar">
+            <span id="resultStats">Showing 0 of 0 tasks</span>
+            <span id="filterInfo"></span>
+        </div>
+
+        <div class="section">
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Map ID</th>
+                            <th>Server</th>
+                            <th>Status</th>
+                            <th>Started</th>
+                            <th>Ended</th>
+                            <th>Duration</th>
+                            <th>Error</th>
+                        </tr>
+                    </thead>
+                    <tbody id="taskTableBody">
+                        <tr>
+                            <td colspan="7" class="no-data">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pagination" id="pagination"></div>
+        </div>
+    </div>
+
+    <script>
+        // Task data embedded from Django
+        const allTasks = {{ tasks_json| safe }};
+
+        // State
+        let filteredTasks = [...allTasks];
+        let currentPage = 1;
+        let pageSize = 25;
+        let searchQuery = '';
+
+        // DOM elements
+        const searchInput = document.getElementById('searchInput');
+        const pageSizeSelect = document.getElementById('pageSizeSelect');
+        const taskTableBody = document.getElementById('taskTableBody');
+        const pagination = document.getElementById('pagination');
+        const resultStats = document.getElementById('resultStats');
+        const filterInfo = document.getElementById('filterInfo');
+
+        // Theme toggle
+        function toggleTheme() {
+            document.body.classList.toggle('dark-mode');
+            const isDark = document.body.classList.contains('dark-mode');
+            localStorage.setItem('darkMode', isDark);
+            document.querySelector('.theme-toggle').textContent = isDark ? '☀️ Day Mode' : '🌙 Night Mode';
+        }
+
+        function initTheme() {
+            const savedTheme = localStorage.getItem('darkMode');
+            const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const isDark = savedTheme !== null ? savedTheme === 'true' : systemDark;
+
+            if (isDark) {
+                document.body.classList.add('dark-mode');
+                document.querySelector('.theme-toggle').textContent = '☀️ Day Mode';
+            }
+        }
+        initTheme();
+
+        // Escape HTML for safety
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Highlight search matches
+        function highlightMatch(text, query) {
+            if (!query || !text) return escapeHtml(text || '');
+            const escaped = escapeHtml(text);
+            const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+            return escaped.replace(regex, '<span class="highlight">$1</span>');
+        }
+
+        // Format date
+        function formatDate(dateStr) {
+            if (!dateStr) return '-';
+            const date = new Date(dateStr);
+            return date.toLocaleString('en-US', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false,
+                timeZone: 'UTC'
+            }) + ' UTC';
+        }
+
+        // Format time ago
+        function timeAgo(dateStr) {
+            if (!dateStr) return '-';
+            const date = new Date(dateStr);
+            const now = new Date();
+            const seconds = Math.floor((now - date) / 1000);
+
+            if (seconds < 60) return `${seconds}s ago`;
+            if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+            if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+            return `${Math.floor(seconds / 86400)}d ago`;
+        }
+
+        // Filter tasks based on search query
+        function filterTasks() {
+            const query = searchQuery.toLowerCase().trim();
+
+            if (!query) {
+                filteredTasks = [...allTasks];
+            } else {
+                filteredTasks = allTasks.filter(task => {
+                    const mapId = (task.map_id || '').toLowerCase();
+                    const serverId = (task.server_id || '').toLowerCase();
+                    const status = (task.status || '').toLowerCase();
+                    const error = (task.error_message || '').toLowerCase();
+
+                    return mapId.includes(query) ||
+                        serverId.includes(query) ||
+                        status.includes(query) ||
+                        error.includes(query);
+                });
+            }
+
+            currentPage = 1;
+            renderTable();
+            renderPagination();
+            updateStats();
+        }
+
+        // Update statistics display
+        function updateStats() {
+            const totalFiltered = filteredTasks.length;
+            const totalAll = allTasks.length;
+            const start = pageSize === 'all' ? 1 : (currentPage - 1) * pageSize + 1;
+            const end = pageSize === 'all' ? totalFiltered : Math.min(currentPage * pageSize, totalFiltered);
+
+            if (totalFiltered === 0) {
+                resultStats.textContent = `No tasks found`;
+            } else if (pageSize === 'all') {
+                resultStats.textContent = `Showing all ${totalFiltered} tasks`;
+            } else {
+                resultStats.textContent = `Showing ${start}-${end} of ${totalFiltered} tasks`;
+            }
+
+            if (searchQuery && totalFiltered !== totalAll) {
+                filterInfo.textContent = `(filtered from ${totalAll} total)`;
+            } else {
+                filterInfo.textContent = `(${totalAll} total)`;
+            }
+        }
+
+        // Render table with current page data
+        function renderTable() {
+            let tasksToShow;
+
+            if (pageSize === 'all') {
+                tasksToShow = filteredTasks;
+            } else {
+                const start = (currentPage - 1) * pageSize;
+                const end = start + pageSize;
+                tasksToShow = filteredTasks.slice(start, end);
+            }
+
+            if (tasksToShow.length === 0) {
+                taskTableBody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="no-data">
+                            ${searchQuery ? 'No tasks match your search' : 'No task history available'}
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            taskTableBody.innerHTML = tasksToShow.map(task => `
+                <tr>
+                    <td><strong>${highlightMatch(task.map_id, searchQuery)}</strong></td>
+                    <td>${task.server_id ? highlightMatch(task.server_id, searchQuery) : '<span class="text-muted">Unknown</span>'}</td>
+                    <td><span class="badge ${task.status}">${highlightMatch(task.status, searchQuery)}</span></td>
+                    <td>
+                        <span class="timestamp">${formatDate(task.start_time)}</span>
+                        <br><small class="text-muted">${timeAgo(task.start_time)}</small>
+                    </td>
+                    <td>
+                        ${task.end_time ? `<span class="timestamp">${formatDate(task.end_time)}</span>` : '<span class="text-muted">-</span>'}
+                    </td>
+                    <td>${task.duration_seconds ? task.duration_seconds.toFixed(2) + 's' : '<span class="text-muted">-</span>'}</td>
+                    <td class="error-cell text-muted" title="${escapeHtml(task.error_message || '')}">${task.error_message ? highlightMatch(task.error_message, searchQuery) : '-'}</td>
+                </tr>
+            `).join('');
+        }
+
+        // Render pagination controls
+        function renderPagination() {
+            if (pageSize === 'all' || filteredTasks.length <= pageSize) {
+                pagination.innerHTML = '';
+                return;
+            }
+
+            const totalPages = Math.ceil(filteredTasks.length / pageSize);
+            let html = '';
+
+            // Previous button
+            html += `<button ${currentPage === 1 ? 'disabled' : ''} onclick="goToPage(${currentPage - 1})">← Prev</button>`;
+
+            // Page numbers
+            const maxButtons = 7;
+            let startPage = Math.max(1, currentPage - Math.floor(maxButtons / 2));
+            let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+
+            if (endPage - startPage < maxButtons - 1) {
+                startPage = Math.max(1, endPage - maxButtons + 1);
+            }
+
+            if (startPage > 1) {
+                html += `<button onclick="goToPage(1)">1</button>`;
+                if (startPage > 2) html += `<span class="page-info">...</span>`;
+            }
+
+            for (let i = startPage; i <= endPage; i++) {
+                html += `<button class="${i === currentPage ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`;
+            }
+
+            if (endPage < totalPages) {
+                if (endPage < totalPages - 1) html += `<span class="page-info">...</span>`;
+                html += `<button onclick="goToPage(${totalPages})">${totalPages}</button>`;
+            }
+
+            // Next button
+            html += `<button ${currentPage === totalPages ? 'disabled' : ''} onclick="goToPage(${currentPage + 1})">Next →</button>`;
+
+            pagination.innerHTML = html;
+        }
+
+        // Go to specific page
+        function goToPage(page) {
+            const totalPages = Math.ceil(filteredTasks.length / pageSize);
+            if (page < 1 || page > totalPages) return;
+
+            currentPage = page;
+            renderTable();
+            renderPagination();
+            updateStats();
+
+            // Scroll to top of table
+            document.querySelector('.table-wrapper').scrollTop = 0;
+        }
+
+        // Debounce function for search
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        // Event listeners
+        searchInput.addEventListener('input', debounce((e) => {
+            searchQuery = e.target.value;
+            filterTasks();
+        }, 200));
+
+        pageSizeSelect.addEventListener('change', (e) => {
+            pageSize = e.target.value === 'all' ? 'all' : parseInt(e.target.value);
+            currentPage = 1;
+            renderTable();
+            renderPagination();
+            updateStats();
+        });
+
+        // Initialize
+        filterTasks();
+    </script>
+</body>
+
+</html>

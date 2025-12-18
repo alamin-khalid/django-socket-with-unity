@@ -100,6 +100,38 @@ def create_map(request):
     else:
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+@api_view(['DELETE'])
+def remove_map(request, map_id):
+    """
+    DELETE /api/map/remove/<map_id>/
+    Removes a planet/map from the system.
+    Will also remove it from the Redis queue (handled by pre_delete signal).
+    """
+    try:
+        map_planet = Planet.objects.get(map_id=map_id)
+        
+        # Check if the map is currently being processed
+        if map_planet.status == 'processing':
+            return Response(
+                {'error': f'Cannot remove map "{map_id}" while it is being processed'},
+                status=status.HTTP_409_CONFLICT
+            )
+        
+        # Delete the planet (pre_delete signal will handle Redis queue cleanup)
+        map_planet.delete()
+        
+        return Response({
+            'status': 'success',
+            'message': f'Map "{map_id}" has been removed'
+        })
+        
+    except Planet.DoesNotExist:
+        return Response(
+            {'error': f'Map "{map_id}" not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+
 @api_view(['POST'])
 def submit_result(request):
     """
@@ -251,6 +283,39 @@ class DashboardView(View):
         }
         
         return render(request, 'game_manager/dashboard.html', context)
+
+
+class TaskHistoryView(View):
+    """
+    Full task history page with all records for client-side filtering/pagination.
+    """
+    def get(self, request):
+        import json
+        
+        # Get all task history
+        tasks = TaskHistory.objects.select_related(
+            'map', 'server'
+        ).order_by('-start_time')
+        
+        # Convert to JSON-serializable format
+        tasks_data = []
+        for task in tasks:
+            tasks_data.append({
+                'map_id': task.map.map_id if task.map else 'Unknown',
+                'server_id': task.server.server_id if task.server else None,
+                'status': task.status,
+                'start_time': task.start_time.isoformat() if task.start_time else None,
+                'end_time': task.end_time.isoformat() if task.end_time else None,
+                'duration_seconds': task.duration_seconds,
+                'error_message': task.error_message,
+            })
+        
+        context = {
+            'tasks_json': json.dumps(tasks_data),
+            'server_time': timezone.now(),
+        }
+        
+        return render(request, 'game_manager/task_history.html', context)
 
 
 @api_view(['POST'])

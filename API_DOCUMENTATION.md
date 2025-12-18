@@ -187,7 +187,45 @@ curl -X POST http://127.0.0.1:8000/api/map/create/ \
 
 ---
 
-### 4. Submit Result
+### 4. Remove Map
+**Method**: `DELETE`  
+**URL**: `/api/map/remove/{map_id}/`
+
+**Description**: Remove a planet/map from the system. The map will also be removed from the Redis processing queue.
+
+**Example**:
+```bash
+curl -X DELETE http://127.0.0.1:8000/api/map/remove/planet_123/
+```
+
+**Response (Success - 200 OK)**:
+```json
+{
+  "status": "success",
+  "message": "Map \"planet_123\" has been removed"
+}
+```
+
+**Response (Not Found - 404)**:
+```json
+{
+  "error": "Map \"planet_123\" not found"
+}
+```
+
+**Response (Processing - 409 Conflict)**:
+```json
+{
+  "error": "Cannot remove map \"planet_123\" while it is being processed"
+}
+```
+
+> [!NOTE]
+> Maps that are currently being processed (status = `processing`) cannot be removed. Wait for the job to complete or cancel it first.
+
+---
+
+### 5. Submit Result
 **Method**: `POST`  
 **URL**: `/api/result/`
 
@@ -228,7 +266,7 @@ curl -X POST http://127.0.0.1:8000/api/result/ \
 
 ---
 
-### 5. List Servers
+### 6. List Servers
 **Method**: `GET`  
 **URL**: `/api/servers/`
 
@@ -266,7 +304,7 @@ curl http://127.0.0.1:8000/api/servers/
 
 ---
 
-### 6. Server Detail
+### 7. Server Detail
 **Method**: `GET`  
 **URL**: `/api/server/{server_id}/`
 
@@ -302,7 +340,7 @@ curl http://127.0.0.1:8000/api/server/unity_192_168_1_100/
 
 ---
 
-### 7. Queue Status
+### 8. Queue Status
 **Method**: `GET`  
 **URL**: `/api/queue/`
 
@@ -328,7 +366,7 @@ curl http://127.0.0.1:8000/api/queue/
 
 ---
 
-### 8. Send Command
+### 9. Send Command
 **Method**: `POST`  
 **URL**: `/api/command/`
 
@@ -378,7 +416,7 @@ curl -X POST http://127.0.0.1:8000/api/command/ \
 
 ## Web Interface
 
-### 9. Dashboard
+### 10. Dashboard
 **Method**: `GET`  
 **URL**: `/dashboard/`
 
@@ -397,7 +435,7 @@ http://127.0.0.1:8000/dashboard/
 
 ---
 
-### 10. Django Admin
+### 11. Django Admin
 **Method**: `GET`  
 **URL**: `/admin/`
 

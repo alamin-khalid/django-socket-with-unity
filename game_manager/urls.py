@@ -4,6 +4,7 @@ from . import views
 urlpatterns = [
     # REST API Endpoints
     path('map/create/', views.create_map, name='create_map'),  # Must come before map/<str:map_id>/
+    path('map/remove/<str:map_id>/', views.remove_map, name='remove_map'),
     path('map/<str:map_id>/', views.get_map_data, name='get_map_data'),
     path('result/', views.submit_result, name='submit_result'),
     path('servers/', views.list_servers, name='list_servers'),
