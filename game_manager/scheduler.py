@@ -14,17 +14,17 @@ _scheduler_thread = None
 
 def assignment_loop():
     """
-    Background loop that checks and assigns maps every second.
+    Background loop that checks and assigns planets every second.
     """
     global _scheduler_running
     logger.info("[Scheduler] ✅ Background assignment scheduler started")
     
     while _scheduler_running:
         try:
-            from .assignment_service import assign_available_maps
-            result = assign_available_maps()
-            # Log all results for debugging
-            logger.debug(f"[Scheduler] Check result: {result}")
+            from .assignment_service import assign_available_planets
+            result = assign_available_planets()
+            # Log all results for visibility
+            logger.info(f"[Scheduler] Check result: {result}")
             if result and "No" not in str(result):
                 logger.info(f"[Scheduler] {result}")
         except Exception as e:

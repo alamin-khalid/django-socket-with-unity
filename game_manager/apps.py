@@ -8,12 +8,20 @@ class GameManagerConfig(AppConfig):
         import os
         import sys
         
-        # Only run on main process or runserver (avoid running on every management command check)
-        # We check for 'runserver' in argv or RUN_MAIN (reloader)
+        # Determine if we should start the scheduler
+        # Option 1: Explicit environment variable (recommended for production)
+        # Option 2: Detect runserver or daphne in argv
+        # Option 3: Detect RUN_MAIN reloader
+        scheduler_enabled = os.environ.get('SCHEDULER_ENABLED', '').lower() == 'true'
         is_runserver = 'runserver' in sys.argv
+        is_daphne = any('daphne' in arg.lower() for arg in sys.argv)
         is_reloader = os.environ.get('RUN_MAIN') == 'true'
         
-        if is_runserver or is_reloader:
+        should_start = scheduler_enabled or is_runserver or is_daphne or is_reloader
+        
+        print(f"[App Ready] scheduler_enabled={scheduler_enabled}, runserver={is_runserver}, daphne={is_daphne}, reloader={is_reloader}, should_start={should_start}")
+        
+        if should_start:
             try:
                 from .startup import reset_all_servers_offline
                 reset_all_servers_offline()

@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 REDIS_HOST = getattr(settings, 'REDIS_HOST', '127.0.0.1')
 REDIS_PORT = getattr(settings, 'REDIS_PORT', 6379)
 REDIS_DB = getattr(settings, 'REDIS_DB', 0)
-QUEUE_KEY = 'map_round_queue'
+QUEUE_KEY = 'planet_round_queue'
 
 def _get_redis_client():
     """
@@ -33,39 +33,39 @@ def _get_redis_client():
         logger.error(f"Redis connection failed: {e}")
         return None
 
-def add_map_to_queue(map_id: str, next_round_time: datetime):
+def add_planet_to_queue(planet_id: str, next_round_time: datetime):
     """
-    Add map to time-sorted queue.
+    Add planet to time-sorted queue.
     
     Args:
-        map_id: Unique map identifier
-        next_round_time: DateTime when the map should be processed
+        planet_id: Unique planet identifier
+        next_round_time: DateTime when the planet should be processed
         
     The score is the Unix timestamp, allowing efficient time-based queries.
     """
     try:
         client = _get_redis_client()
         if not client:
-            logger.warning(f"Queue unavailable, map {map_id} not queued to Redis (DB state unchanged)")
+            logger.warning(f"Queue unavailable, planet {planet_id} not queued to Redis (DB state unchanged)")
             return False
             
         score = next_round_time.timestamp()
-        client.zadd(QUEUE_KEY, {map_id: score})
-        logger.info(f"[Queue] Added map {map_id} to queue for {next_round_time}")
+        client.zadd(QUEUE_KEY, {planet_id: score})
+        logger.info(f"[Queue] Added planet {planet_id} to queue for {next_round_time}")
         return True
     except RedisError as e:
-        logger.error(f"Failed to queue map {map_id}: {e}")
+        logger.error(f"Failed to queue planet {planet_id}: {e}")
         return False
 
-def get_due_maps(limit: int = 10):
+def get_due_planets(limit: int = 10):
     """
-    Get maps where next_round_time <= now.
+    Get planets where next_round_time <= now.
     
     Args:
-        limit: Maximum number of maps to return
+        limit: Maximum number of planets to return
         
     Returns:
-        List of map_ids that are ready for processing
+        List of planet_ids that are ready for processing
     """
     try:
         client = _get_redis_client()
@@ -74,39 +74,39 @@ def get_due_maps(limit: int = 10):
             
         from django.utils import timezone
         now = timezone.now().timestamp()
-        # ZRANGEBYSCORE returns maps with score between 0 and now
-        map_ids = client.zrangebyscore(QUEUE_KEY, 0, now, start=0, num=limit)
-        return [map_id if isinstance(map_id, str) else map_id.decode('utf-8') for map_id in map_ids]
+        # ZRANGEBYSCORE returns planets with score between 0 and now
+        planet_ids = client.zrangebyscore(QUEUE_KEY, 0, now, start=0, num=limit)
+        return [planet_id if isinstance(planet_id, str) else planet_id.decode('utf-8') for planet_id in planet_ids]
     except RedisError as e:
-        logger.error(f"Failed to get due maps: {e}")
+        logger.error(f"Failed to get due planets: {e}")
         return []
 
-def remove_from_queue(map_id: str):
+def remove_from_queue(planet_id: str):
     """
-    Remove map from queue (when processing starts).
+    Remove planet from queue (when processing starts).
     
     Args:
-        map_id: Map identifier to remove
+        planet_id: Planet identifier to remove
     """
     try:
         client = _get_redis_client()
         if not client:
-            logger.warning(f"Queue unavailable, could not remove map {map_id}")
+            logger.warning(f"Queue unavailable, could not remove planet {planet_id}")
             return False
             
-        client.zrem(QUEUE_KEY, map_id)
-        logger.info(f"[Queue] Removed map {map_id} from queue")
+        client.zrem(QUEUE_KEY, planet_id)
+        logger.info(f"[Queue] Removed planet {planet_id} from queue")
         return True
     except RedisError as e:
-        logger.error(f"Failed to remove map {map_id} from queue: {e}")
+        logger.error(f"Failed to remove planet {planet_id} from queue: {e}")
         return False
 
 def get_queue_size():
     """
-    Get total number of maps in queue.
+    Get total number of planets in queue.
     
     Returns:
-        Integer count of queued maps, or 0 if Redis unavailable
+        Integer count of queued planets, or 0 if Redis unavailable
     """
     try:
         client = _get_redis_client()
@@ -119,10 +119,10 @@ def get_queue_size():
 
 def peek_next_due_time():
     """
-    Get timestamp of next due map without removing it.
+    Get timestamp of next due planet without removing it.
     
     Returns:
-        DateTime of next scheduled map, or None if queue is empty
+        DateTime of next scheduled planet, or None if queue is empty
     """
     try:
         client = _get_redis_client()
@@ -137,12 +137,12 @@ def peek_next_due_time():
         logger.error(f"Failed to peek next due time: {e}")
         return None
 
-def get_all_queued_maps():
+def get_all_queued_planets():
     """
-    Get all maps in queue with their scheduled times.
+    Get all planets in queue with their scheduled times.
     
     Returns:
-        List of tuples: [(map_id, datetime), ...]
+        List of tuples: [(planet_id, datetime), ...]
     """
     try:
         client = _get_redis_client()
@@ -150,7 +150,7 @@ def get_all_queued_maps():
             return []
             
         results = client.zrange(QUEUE_KEY, 0, -1, withscores=True)
-        return [(map_id, datetime.fromtimestamp(float(score))) for map_id, score in results]
+        return [(planet_id, datetime.fromtimestamp(float(score))) for planet_id, score in results]
     except RedisError as e:
-        logger.error(f"Failed to get all queued maps: {e}")
+        logger.error(f"Failed to get all queued planets: {e}")
         return []

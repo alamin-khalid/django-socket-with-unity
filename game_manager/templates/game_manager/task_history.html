@@ -342,7 +342,7 @@
             <div class="search-box">
                 <span>🔍</span>
                 <input type="text" class="search-input" id="searchInput"
-                    placeholder="Search by Map ID, Server, or Status...">
+                    placeholder="Search by Planet ID, Server, or Status...">
             </div>
             <div class="page-size-control">
                 <label>Show:</label>
@@ -366,7 +366,7 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>Map ID</th>
+                            <th>Planet ID</th>
                             <th>Server</th>
                             <th>Status</th>
                             <th>Started</th>
@@ -477,12 +477,12 @@
                 filteredTasks = [...allTasks];
             } else {
                 filteredTasks = allTasks.filter(task => {
-                    const mapId = (task.map_id || '').toLowerCase();
+                    const planetId = (task.planet_id || '').toLowerCase();
                     const serverId = (task.server_id || '').toLowerCase();
                     const status = (task.status || '').toLowerCase();
                     const error = (task.error_message || '').toLowerCase();
 
-                    return mapId.includes(query) ||
+                    return planetId.includes(query) ||
                         serverId.includes(query) ||
                         status.includes(query) ||
                         error.includes(query);
@@ -542,7 +542,7 @@
 
             taskTableBody.innerHTML = tasksToShow.map(task => `
                 <tr>
-                    <td><strong>${highlightMatch(task.map_id, searchQuery)}</strong></td>
+                    <td><strong>${highlightMatch(task.planet_id, searchQuery)}</strong></td>
                     <td>${task.server_id ? highlightMatch(task.server_id, searchQuery) : '<span class="text-muted">Unknown</span>'}</td>
                     <td><span class="badge ${task.status}">${highlightMatch(task.status, searchQuery)}</span></td>
                     <td>

@@ -15,59 +15,59 @@ from .utils import send_command_to_server
 # ============================================================================
 
 @api_view(['GET'])
-def get_map_data(request, map_id):
+def get_planet_data(request, planet_id):
     """
-    Unity calls: GET /api/map/<map_id>/
-    Returns map configuration for processing.
+    Unity calls: GET /api/planet/<planet_id>/
+    Returns planet configuration for processing.
     """
     try:
-        map_planet = Planet.objects.get(map_id=map_id)
-        serializer = PlanetSerializer(map_planet)
+        planet = Planet.objects.get(planet_id=planet_id)
+        serializer = PlanetSerializer(planet)
         return Response(serializer.data)
     except Planet.DoesNotExist:
-        return Response({'error': 'Map not found'}, status=status.HTTP_404_NOT_FOUND)
+        return Response({'error': 'Planet not found'}, status=status.HTTP_404_NOT_FOUND)
 
 @api_view(['POST'])
-def create_map(request):
+def create_planet(request):
     """
-    POST /api/map/create/
+    POST /api/planet/create/
     Body: {
-        'map_id': 'planet_123',  # Required, also called planetId
-        'season_id': 1,           # Required
+        'planet_id': 'planet_123',  # Required
+        'season_id': 1,              # Required
     }
-    Creates a new map/planet with validation to prevent duplicates.
+    Creates a new planet with validation to prevent duplicates.
     Automatically adds it the processing queue.
     """
     import re
-    from .redis_queue import add_map_to_queue
+    from .redis_queue import add_planet_to_queue
     
-    map_id = request.data.get('map_id')
+    planet_id = request.data.get('planet_id')
     
-    # Validate that map_id is provided
-    if not map_id:
+    # Validate that planet_id is provided
+    if not planet_id:
         return Response(
-            {'error': 'map_id (planetId) is required'}, 
+            {'error': 'planet_id is required'}, 
             status=status.HTTP_400_BAD_REQUEST
         )
     
-    # Validate map_id format (alphanumeric, underscore, hyphen only)
-    if not re.match(r'^[a-zA-Z0-9_-]+$', str(map_id)):
+    # Validate planet_id format (alphanumeric, underscore, hyphen only)
+    if not re.match(r'^[a-zA-Z0-9_-]+$', str(planet_id)):
         return Response(
-            {'error': 'map_id must contain only letters, numbers, underscores, and hyphens'}, 
+            {'error': 'planet_id must contain only letters, numbers, underscores, and hyphens'}, 
             status=status.HTTP_400_BAD_REQUEST
         )
     
-    # Validate map_id length
-    if len(str(map_id)) > 100:
+    # Validate planet_id length
+    if len(str(planet_id)) > 100:
         return Response(
-            {'error': 'map_id must be 100 characters or less'}, 
+            {'error': 'planet_id must be 100 characters or less'}, 
             status=status.HTTP_400_BAD_REQUEST
         )
     
-    # Check for duplicate map_id
-    if Planet.objects.filter(map_id=map_id).exists():
+    # Check for duplicate planet_id
+    if Planet.objects.filter(planet_id=planet_id).exists():
         return Response(
-            {'error': f'Map with map_id "{map_id}" already exists'}, 
+            {'error': f'Planet with planet_id "{planet_id}" already exists'}, 
             status=status.HTTP_409_CONFLICT
         )
     
@@ -77,57 +77,57 @@ def create_map(request):
     # Always set next_round_time to NOW
     data['next_round_time'] = timezone.now().isoformat()
     
-    # Create the map using serializer
+    # Create the planet using serializer
     serializer = PlanetSerializer(data=data)
     if serializer.is_valid():
-        map_obj = serializer.save()
+        planet_obj = serializer.save()
         
         # Add to Redis queue for immediate processing
         try:
-            add_map_to_queue(map_obj.map_id, map_obj.next_round_time)
+            add_planet_to_queue(planet_obj.planet_id, planet_obj.next_round_time)
             
             # Trigger assignment check immediately
-            from .assignment_service import assign_available_maps
-            assign_available_maps()
+            from .assignment_service import assign_available_planets
+            assign_available_planets()
             
         except Exception as e:
             # Log error but don't fail the request
             import logging
             logger = logging.getLogger(__name__)
-            logger.error(f"Failed to add/assign map {map_obj.map_id}: {e}")
+            logger.error(f"Failed to add/assign planet {planet_obj.planet_id}: {e}")
         
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     else:
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['DELETE'])
-def remove_map(request, map_id):
+def remove_planet(request, planet_id):
     """
-    DELETE /api/map/remove/<map_id>/
-    Removes a planet/map from the system.
+    DELETE /api/planet/remove/<planet_id>/
+    Removes a planet from the system.
     Will also remove it from the Redis queue (handled by pre_delete signal).
     """
     try:
-        map_planet = Planet.objects.get(map_id=map_id)
+        planet = Planet.objects.get(planet_id=planet_id)
         
-        # Check if the map is currently being processed
-        if map_planet.status == 'processing':
+        # Check if the planet is currently being processed
+        if planet.status == 'processing':
             return Response(
-                {'error': f'Cannot remove map "{map_id}" while it is being processed'},
+                {'error': f'Cannot remove planet "{planet_id}" while it is being processed'},
                 status=status.HTTP_409_CONFLICT
             )
         
         # Delete the planet (pre_delete signal will handle Redis queue cleanup)
-        map_planet.delete()
+        planet.delete()
         
         return Response({
             'status': 'success',
-            'message': f'Map "{map_id}" has been removed'
+            'message': f'Planet "{planet_id}" has been removed'
         })
         
     except Planet.DoesNotExist:
         return Response(
-            {'error': f'Map "{map_id}" not found'},
+            {'error': f'Planet "{planet_id}" not found'},
             status=status.HTTP_404_NOT_FOUND
         )
 
@@ -137,7 +137,7 @@ def submit_result(request):
     """
     Unity calls: POST /api/result/
     Body: {
-        'map_id': '...',
+        'planet_id': '...',
         'server_id': '...',
         'next_round_time': '2025-12-12T03:00:00Z'  # ISO 8601 datetime string
     }
@@ -147,13 +147,13 @@ def submit_result(request):
     
     from dateutil import parser
     
-    map_id = request.data.get('map_id')
+    planet_id = request.data.get('planet_id')
     server_id = request.data.get('server_id')
     next_round_time_str = request.data.get('next_round_time')
     
-    if not map_id or not server_id:
+    if not planet_id or not server_id:
         return Response(
-            {'error': 'Missing map_id or server_id'}, 
+            {'error': 'Missing planet_id or server_id'}, 
             status=status.HTTP_400_BAD_REQUEST
         )
     
@@ -174,7 +174,7 @@ def submit_result(request):
     
     # Trigger async job completion
     handle_job_completion.delay(
-        map_id=map_id,
+        planet_id=planet_id,
         server_id=server_id,
         next_round_time_str=next_round_time.isoformat()
     )
@@ -205,8 +205,8 @@ def queue_status(request):
         'idle_servers': UnityServer.objects.filter(status='idle').count(),
         'busy_servers': UnityServer.objects.filter(status='busy').count(),
         'offline_servers': UnityServer.objects.filter(status='offline').count(),
-        'queued_maps': Planet.objects.filter(status='queued').count(),
-        'processing_maps': Planet.objects.filter(status='processing').count(),
+        'queued_planets': Planet.objects.filter(status='queued').count(),
+        'processing_planets': Planet.objects.filter(status='processing').count(),
     })
 
 @api_view(['GET'])
@@ -228,17 +228,17 @@ def server_detail(request, server_id):
 
 class DashboardView(View):
     """
-    Admin dashboard showing server status and map queue.
+    Admin dashboard showing server status and planet queue.
     """
     def get(self, request):
         from django.db.models import Avg
         
         servers = UnityServer.objects.all().order_by('server_id')
-        maps = Planet.objects.exclude(status='completed').order_by('next_round_time')[:20]
+        planets = Planet.objects.exclude(status='completed').order_by('next_round_time')[:20]
         
         # Get recent task history (last 50 tasks)
         recent_tasks = TaskHistory.objects.select_related(
-            'map', 'server'
+            'planet', 'server'
         ).order_by('-start_time')[:50]
         
         # Calculate statistics
@@ -261,7 +261,7 @@ class DashboardView(View):
         
         context = {
             'servers': servers,
-            'maps': maps,
+            'planets': planets,
             'queue_size': get_queue_size(),
             'next_due': peek_next_due_time(),
             # Task history and statistics
@@ -294,14 +294,14 @@ class TaskHistoryView(View):
         
         # Get all task history
         tasks = TaskHistory.objects.select_related(
-            'map', 'server'
+            'planet', 'server'
         ).order_by('-start_time')
         
         # Convert to JSON-serializable format
         tasks_data = []
         for task in tasks:
             tasks_data.append({
-                'map_id': task.map.map_id if task.map else 'Unknown',
+                'planet_id': task.planet.planet_id if task.planet else 'Unknown',
                 'server_id': task.server.server_id if task.server else None,
                 'status': task.status,
                 'start_time': task.start_time.isoformat() if task.start_time else None,
@@ -322,11 +322,11 @@ class TaskHistoryView(View):
 def force_assign(request):
     """
     POST /api/force-assign/
-    Manually trigger map assignment to idle servers.
+    Manually trigger planet assignment to idle servers.
     """
     try:
-        from .assignment_service import assign_available_maps
-        result = assign_available_maps()
+        from .assignment_service import assign_available_planets
+        result = assign_available_planets()
         return Response({
             'status': 'success',
             'result': str(result)

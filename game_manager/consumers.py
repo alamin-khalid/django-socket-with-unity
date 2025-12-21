@@ -58,7 +58,7 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         Message types:
         - heartbeat: {"type": "heartbeat", "idle_cpu": 15.2, "idle_ram": 40.5, "max_cpu": 75.0, "max_ram": 85.0, "disk": 60.0}
         - status_update: {"type": "status_update", "status": "busy"}
-        - job_done: {"type": "job_done", "map_id": "...", "next_round_time": "2025-12-12T03:00:00Z"}
+        - job_done: {"type": "job_done", "planet_id": "...", "next_round_time": "2025-12-12T03:00:00Z"}
         - error: {"type": "error", "error": "..."}
         """
         message_type = content.get('type')
@@ -155,31 +155,40 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         from .tasks import handle_job_completion
 
         try:
-            map_id = data.get('map_id')
+            planet_id = data.get('planet_id')
             next_round_time = data.get('next_round_time')
 
+            if not planet_id:
+                logger.warning(f"[Job Done] Missing planet_id")
+                return
+                
             if not next_round_time:
-                logger.warning(f"[Job Done] Missing next_round_time for {map_id}")
+                logger.warning(f"[Job Done] Missing next_round_time for {planet_id}")
                 return
 
             # Trigger Celery task
             handle_job_completion.delay(
-                map_id=map_id,
+                planet_id=str(planet_id),
                 server_id=self.server_id,
                 next_round_time_str=next_round_time
             )
 
-            logger.info(f"[Job Done] {self.server_id} completed {map_id}, next: {next_round_time}")
+            logger.info(f"[Job Done] {self.server_id} completed {planet_id}, next: {next_round_time}")
         except Exception as e:
             logger.error(f"[Job Done] Error: {e}")
 
     @database_sync_to_async
     def handle_error(self, data):
         """Process error report from Unity"""
+        from .tasks import handle_job_error
+        
+        planet_id = data.get('planet_id')
         error_message = data.get('error', 'Unknown error')
+        
         print(f"[Error] ⚠ {self.server_id} reported: {error_message}")
-
-        # TODO: Log to database, notify admins, etc.
+        
+        if planet_id:
+            handle_job_error.delay(str(planet_id), self.server_id, error_message)
 
     @database_sync_to_async
     def handle_disconnect(self, data):
@@ -198,7 +207,7 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         Celery sends:
         {
             'type': 'job_assignment',
-            'map_id': 'map_001',
+            'planet_id': 'planet_001',
             'season_id': 1,
             'round_id': 5
         }
@@ -206,16 +215,16 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         Unity receives:
         {
             'type': 'assign_job',
-            'map_id': 'map_001',
+            'planet_id': 'planet_001',
             'season_id': 1,
             'round_id': 5
         }
         """
-        print(f"[Job Assignment] ⬆ Sending to {self.server_id}: Map {event.get('map_id')}")
+        print(f"[Job Assignment] ⬆ Sending to {self.server_id}: Planet {event.get('planet_id')}")
 
         await self.send_json({
             'type': 'assign_job',
-            'map_id': event.get('map_id'),
+            'planet_id': event.get('planet_id'),
             'season_id': event.get('season_id', 1),
             'round_id': event.get('round_id', 0)
         })
@@ -277,11 +286,10 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         Trigger assignment check
         """
         try:
-            from .assignment_service import assign_available_maps
+            from .assignment_service import assign_available_planets
             # Run synchronous assignment logic in thread
-            result = await database_sync_to_async(assign_available_maps)()
-            if result and "Assigned" in str(result) and "0" not in str(result):
-                print(f"[Assignment] ⚡ Triggered: {result}")
+            result = await database_sync_to_async(assign_available_planets)()
+            print(f"[Assignment] ⚡ Result: {result}")  # Always log for debugging
         except Exception as e:
             print(f"[Assignment] ❌ Error triggering assignment: {e}")
 
@@ -307,14 +315,14 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
                 planet.save()
 
                 # Re-add to Redis queue
-                from .redis_queue import add_map_to_queue
-                add_map_to_queue(planet.map_id, planet.next_round_time)
+                from .redis_queue import add_planet_to_queue
+                add_planet_to_queue(planet.planet_id, planet.next_round_time)
 
-                print(f"[Recovery] ♻ Recovered job {planet.map_id} from {self.server_id}")
+                print(f"[Recovery] ♻ Recovered job {planet.planet_id} from {self.server_id}")
 
                 # Mark task history as timeout
                 TaskHistory.objects.filter(
-                    map=planet,
+                    planet=planet,
                     server=server,
                     status='started'
                 ).update(

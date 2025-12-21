@@ -99,8 +99,8 @@ CELERY_TIMEZONE = 'UTC'
 CELERY_TASK_ALWAYS_EAGER = True  # Run tasks immediately (useful for dev without worker)
 
 CELERY_BEAT_SCHEDULE = {
-    'process-due-maps': {
-        'task': 'game_manager.tasks.process_due_maps',
+    'process-due-planets': {
+        'task': 'game_manager.tasks.process_due_planets',
         'schedule': 5.0,  # Every 5 seconds
     },
     'check-server-health': {

@@ -30,6 +30,7 @@ public class UnityWebSocketClient : MonoBehaviour
     private int reconnectAttempt;
     private Coroutine reconnectRoutine;
     private bool isQuitting;
+    private bool isReconnecting; // Track if this is a reconnection vs initial connect
 
     private enum DisconnectReason
     {
@@ -146,6 +147,17 @@ public class UnityWebSocketClient : MonoBehaviour
             lastDisconnectReason = DisconnectReason.None;
 
             Debug.Log($"[WebSocket] ✅ Connected as {serverId}");
+
+            // On reconnect, immediately send idle status to let Django know we're ready
+            if (isReconnecting)
+            {
+                MainThreadDispatcher.Enqueue(() =>
+                {
+                    SendStatusUpdate("idle");
+                    Debug.Log("[WebSocket] ✅ Reconnected and marked as idle");
+                });
+                isReconnecting = false;
+            }
         };
 
         ws.OnMessage += (s, e) => { MainThreadDispatcher.Enqueue(() => { HandleMessage(e.Data); }); };
@@ -198,6 +210,7 @@ public class UnityWebSocketClient : MonoBehaviour
         if (isQuitting) yield break;
 
         Debug.Log("[WebSocket] 🔁 Reconnecting...");
+        isReconnecting = true; // Mark as reconnection attempt
         try
         {
             ws?.Close();
@@ -206,6 +219,7 @@ public class UnityWebSocketClient : MonoBehaviour
         catch (Exception ex)
         {
             Debug.LogError($"[WebSocket] ❌ Reconnect failed: {ex.Message}");
+            isReconnecting = false;
             ScheduleReconnect();
         }
     }
@@ -244,9 +258,12 @@ public class UnityWebSocketClient : MonoBehaviour
 
     private void HandleJob(JObject data)
     {
+        // Mark as busy immediately when receiving job
+        SendStatusUpdate("busy");
+
         PlanetCalculateOrder order = new PlanetCalculateOrder
         {
-            planetId = data["map_id"]?.ToObject<int>() ?? 0,
+            planetId = data["planet_id"]?.ToObject<int>() ?? 0,
             seasonId = data["season_id"]?.ToObject<int>() ?? 0,
             roundId = data["round_id"]?.ToObject<int>() ?? 0
         };
@@ -254,6 +271,7 @@ public class UnityWebSocketClient : MonoBehaviour
         if (order.planetId <= 0)
         {
             Debug.LogError("[Job] Invalid planetId");
+            SendStatusUpdate("idle"); // Revert to idle if invalid
             return;
         }
 
@@ -294,17 +312,24 @@ public class UnityWebSocketClient : MonoBehaviour
 
             if (ws != null && ws.IsAlive)
             {
-                JObject msg = new JObject
+                try
                 {
-                    ["type"] = "heartbeat",
-                    ["idle_cpu"] = performanceTracker.idlePeakCPU,
-                    ["max_cpu"] = performanceTracker.taskPeakCPU,
-                    ["idle_ram"] = performanceTracker.idlePeakRAM,
-                    ["max_ram"] = performanceTracker.taskPeakRAM,
-                    ["disk"] = performanceTracker.currentDisk
-                };
+                    JObject msg = new JObject
+                    {
+                        ["type"] = "heartbeat",
+                        ["idle_cpu"] = performanceTracker.idlePeakCPU,
+                        ["max_cpu"] = performanceTracker.taskPeakCPU,
+                        ["idle_ram"] = performanceTracker.idlePeakRAM,
+                        ["max_ram"] = performanceTracker.taskPeakRAM,
+                        ["disk"] = performanceTracker.currentDisk
+                    };
 
-                ws.Send(msg.ToString());
+                    ws.Send(msg.ToString());
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"[Heartbeat] Error: {ex.Message}");
+                }
             }
         }
     }
@@ -324,7 +349,7 @@ public class UnityWebSocketClient : MonoBehaviour
         }.ToString());
     }
 
-    public void SendJobDone(int mapId, string nextRoundTimeStr)
+    public void SendJobDone(int planetId, string nextRoundTimeStr)
     {
         if (ws == null || !ws.IsAlive) return;
 
@@ -340,11 +365,11 @@ public class UnityWebSocketClient : MonoBehaviour
         ws.Send(new JObject
         {
             ["type"] = "job_done",
-            ["map_id"] = mapId.ToString(), // Convert to string for Django CharField
+            ["planet_id"] = planetId.ToString(),
             ["next_round_time"] = nextRoundTime.ToString("O") // ISO 8601 format with Z suffix
         }.ToString());
 
-        Debug.Log($"[Job Done] ✅ Sent for {mapId}, next: {nextRoundTime:O}");
+        Debug.Log($"[Job Done] ✅ Sent for {planetId}, next: {nextRoundTime:O}");
 
         // Mark server as idle for new assignments
         SendStatusUpdate("idle");
@@ -357,9 +382,12 @@ public class UnityWebSocketClient : MonoBehaviour
         ws.Send(new JObject
         {
             ["type"] = "error",
-            ["planet_id"] = planetId,
+            ["planet_id"] = planetId.ToString(),
             ["error"] = cause
         }.ToString());
+
+        // Mark server as idle after error
+        SendStatusUpdate("idle");
     }
 
     // ===============================

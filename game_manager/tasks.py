@@ -3,49 +3,49 @@ from celery.utils.log import get_task_logger
 from django.utils import timezone
 from datetime import timedelta, datetime
 from .models import UnityServer, Planet, TaskHistory
-from .redis_queue import get_due_maps, remove_from_queue, add_map_to_queue
+from .redis_queue import get_due_planets, remove_from_queue, add_planet_to_queue
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
 logger = get_task_logger(__name__)
 
 @shared_task
-def process_due_maps():
+def process_due_planets():
     """
     Main scheduling loop - runs every 5 seconds.
-    Checks for due maps and assigns to idle servers.
+    Checks for due planets and assigns to idle servers.
     """
-    from .assignment_service import assign_available_maps
-    return assign_available_maps()
+    from .assignment_service import assign_available_planets
+    return assign_available_planets()
 
 @shared_task
-def assign_job_to_server(map_id: str, server_id: int):
+def assign_job_to_server(planet_id: str, server_id: int):
     """
-    Assign specific map to specific server via WebSocket.
+    Assign specific planet to specific server via WebSocket.
     
     Args:
-        map_id: Map identifier (string)
+        planet_id: Planet identifier (string)
         server_id: UnityServer database ID (integer)
     """
     try:
-        map_obj = Planet.objects.get(map_id=map_id)
+        planet_obj = Planet.objects.get(planet_id=planet_id)
         server = UnityServer.objects.get(id=server_id)
         
-        logger.info(f"Assigning map {map_id} to server {server.server_id}")
+        logger.info(f"Assigning planet {planet_id} to server {server.server_id}")
         
-        # Update map status
-        map_obj.status = 'processing'
-        map_obj.processing_server = server
-        map_obj.save()
+        # Update planet status
+        planet_obj.status = 'processing'
+        planet_obj.processing_server = server
+        planet_obj.save()
         
         # Update server status
         server.status = 'busy'
-        server.current_task = map_obj
+        server.current_task = planet_obj
         server.save()
         
         # Create task history record
         TaskHistory.objects.create(
-            map=map_obj,
+            planet=planet_obj,
             server=server,
             status='started'
         )
@@ -56,17 +56,17 @@ def assign_job_to_server(map_id: str, server_id: int):
             f'server_{server.server_id}',
             {
                 'type': 'job_assignment',
-                'map_id': map_obj.map_id,
-                'round_id': map_obj.round_id,
-                'season_id': map_obj.season_id,
+                'planet_id': planet_obj.planet_id,
+                'round_id': planet_obj.round_id,
+                'season_id': planet_obj.season_id,
             }
         )
         
-        logger.info(f"Job assigned: {map_id} → {server.server_id}")
+        logger.info(f"Job assigned: {planet_id} → {server.server_id}")
         return True
         
     except Planet.DoesNotExist:
-        logger.error(f"Map {map_id} not found")
+        logger.error(f"Planet {planet_id} not found")
         return False
     except UnityServer.DoesNotExist:
         logger.error(f"Server with ID {server_id} not found")
@@ -76,46 +76,46 @@ def assign_job_to_server(map_id: str, server_id: int):
         return False
 
 @shared_task
-def handle_job_completion(map_id: str, server_id: str, next_round_time_str: str):
+def handle_job_completion(planet_id: str, server_id: str, next_round_time_str: str):
     """
     Process completed job from Unity.
-    - Update map status
+    - Update planet status
     - Free up server
-    - Requeue map for next round
+    - Requeue planet for next round
     
     Args:
-        map_id: Map identifier
+        planet_id: Planet identifier
         server_id: Server identifier (string, not DB ID)
         next_round_time_str: ISO 8601 datetime string for next round
     """
     from dateutil import parser
     
     try:
-        map_obj = Planet.objects.get(map_id=map_id)
+        planet_obj = Planet.objects.get(planet_id=planet_id)
         server = UnityServer.objects.get(server_id=server_id)
         
-        logger.info(f"Processing job completion: {map_id} from {server_id}")
+        logger.info(f"Processing job completion: {planet_id} from {server_id}")
         
         # Parse next round time from ISO string
         next_round_time = parser.isoparse(next_round_time_str)
         
-        # Update map
-        map_obj.status = 'queued'
-        map_obj.round_id += 1
-        map_obj.next_round_time = next_round_time
-        map_obj.last_processed = timezone.now()
-        map_obj.processing_server = None
-        map_obj.save()
+        # Update planet
+        planet_obj.status = 'queued'
+        planet_obj.round_id += 1
+        planet_obj.next_round_time = next_round_time
+        planet_obj.last_processed = timezone.now()
+        planet_obj.processing_server = None
+        planet_obj.save()
         
         # Free server
         server.status = 'idle'
         server.current_task = None
-        server.total_completed_map += 1
+        server.total_completed_planet += 1
         server.save()
         
         # Update task history
         task_history = TaskHistory.objects.filter(
-            map=map_obj,
+            planet=planet_obj,
             server=server,
             status='started'
         ).order_by('-start_time').first()
@@ -129,13 +129,13 @@ def handle_job_completion(map_id: str, server_id: str, next_round_time_str: str)
             logger.info(f"Task history updated: {duration:.2f}s")
         
         # Requeue for next round
-        add_map_to_queue(map_obj.map_id, next_round_time)
+        add_planet_to_queue(planet_obj.planet_id, next_round_time)
         
-        logger.info(f"Map {map_id} completed, round {map_obj.round_id}, next at {next_round_time}")
-        return f"Map {map_id} completed and requeued for {next_round_time}"
+        logger.info(f"Planet {planet_id} completed, round {planet_obj.round_id}, next at {next_round_time}")
+        return f"Planet {planet_id} completed and requeued for {next_round_time}"
         
     except Planet.DoesNotExist:
-        logger.error(f"Map {map_id} not found during completion")
+        logger.error(f"Planet {planet_id} not found during completion")
         return False
     except UnityServer.DoesNotExist:
         logger.error(f"Server {server_id} not found during completion")
@@ -168,20 +168,20 @@ def check_server_health():
         
         # If had a job, recover it
         if server.current_task:
-            map_obj = server.current_task
-            logger.info(f"Recovering job {map_obj.map_id} from offline server {server.server_id}")
+            planet_obj = server.current_task
+            logger.info(f"Recovering job {planet_obj.planet_id} from offline server {server.server_id}")
             
-            # Reset map to queued
-            map_obj.status = 'queued'
-            map_obj.processing_server = None
-            map_obj.save()
+            # Reset planet to queued
+            planet_obj.status = 'queued'
+            planet_obj.processing_server = None
+            planet_obj.save()
             
             # Re-add to queue
-            add_map_to_queue(map_obj.map_id, map_obj.next_round_time)
+            add_planet_to_queue(planet_obj.planet_id, planet_obj.next_round_time)
             
             # Mark task history as failed/timeout
             TaskHistory.objects.filter(
-                map=map_obj,
+                planet=planet_obj,
                 server=server,
                 status='started'
             ).update(
@@ -202,34 +202,35 @@ def check_server_health():
     return "All servers healthy"
 
 @shared_task
-def handle_job_error(map_id: str, server_id: str, error_message: str):
+def handle_job_error(planet_id: str, server_id: str, error_message: str):
     """
     Handle job errors reported by Unity servers.
     
     Args:
-        map_id: Map identifier
+        planet_id: Planet identifier
         server_id: Server identifier
         error_message: Error description
     """
     try:
-        map_obj = Planet.objects.get(map_id=map_id)
+        planet_obj = Planet.objects.get(planet_id=planet_id)
         server = UnityServer.objects.get(server_id=server_id)
         
-        logger.error(f"Job error: {map_id} on {server_id}: {error_message}")
+        logger.error(f"Job error: {planet_id} on {server_id}: {error_message}")
         
-        # Update map status
-        map_obj.status = 'error'
-        map_obj.processing_server = None
-        map_obj.save()
+        # Update planet status
+        planet_obj.status = 'error'
+        planet_obj.processing_server = None
+        planet_obj.save()
         
         # Free server
         server.status = 'idle'
         server.current_task = None
+        server.total_failed_planet += 1  # Increment failed counter
         server.save()
         
         # Update task history
         task_history = TaskHistory.objects.filter(
-            map=map_obj,
+            planet=planet_obj,
             server=server,
             status='started'
         ).order_by('-start_time').first()
@@ -242,7 +243,7 @@ def handle_job_error(map_id: str, server_id: str, error_message: str):
             task_history.duration_seconds = duration
             task_history.save()
         
-        logger.info(f"Job error handled for {map_id}")
+        logger.info(f"Job error handled for {planet_id}")
         return True
         
     except Exception as e:

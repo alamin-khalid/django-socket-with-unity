@@ -7,7 +7,7 @@ class PlanetSerializer(serializers.ModelSerializer):
     class Meta:
         model = Planet
         fields = [
-            'map_id',
+            'planet_id',
             'season_id', 
             'round_id',
             'current_round_number', 
@@ -19,7 +19,7 @@ class PlanetSerializer(serializers.ModelSerializer):
         read_only_fields = ['status', 'last_processed', 'processing_server_id']
 
 class UnityServerSerializer(serializers.ModelSerializer):
-    current_task_id = serializers.CharField(source='current_task.map_id', read_only=True, allow_null=True)
+    current_task_id = serializers.CharField(source='current_task.planet_id', read_only=True, allow_null=True)
     uptime_seconds = serializers.SerializerMethodField()
     
     class Meta:
@@ -38,9 +38,9 @@ class UnityServerSerializer(serializers.ModelSerializer):
             'current_task_id',
             'connected_at',
             'disconnected_at',
-            'total_assigned_map',
-            'total_completed_map',
-            'total_failed_map',
+            'total_assigned_planet',
+            'total_completed_planet',
+            'total_failed_planet',
             'uptime_seconds',
         ]
     
@@ -52,14 +52,14 @@ class UnityServerSerializer(serializers.ModelSerializer):
         return 0
 
 class TaskHistorySerializer(serializers.ModelSerializer):
-    map_id = serializers.CharField(source='map.map_id', read_only=True)
+    planet_id = serializers.CharField(source='planet.planet_id', read_only=True)
     server_id = serializers.CharField(source='server.server_id', read_only=True, allow_null=True)
     
     class Meta:
         model = TaskHistory
         fields = [
             'id',
-            'map_id',
+            'planet_id',
             'server_id',
             'start_time',
             'end_time',
