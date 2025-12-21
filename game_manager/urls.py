@@ -5,6 +5,7 @@ urlpatterns = [
     # REST API Endpoints - Active
     path('map/create/', views.create_map, name='create_map'),
     path('map/remove/<str:map_id>/', views.remove_map, name='remove_map'),
+    path('map/remove/<str:map_id>', views.remove_map),  # Allow without trailing slash
     path('command/', views.send_server_command, name='send_command'),
     path('force-assign/', views.force_assign, name='force_assign'),
     
