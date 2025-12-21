@@ -89,7 +89,8 @@ ws.Connect();
 
 ### 2. Get Map Data
 **Method**: `GET`  
-**URL**: `/api/map/{map_id}/`
+**URL**: `/api/map/{map_id}/`  
+**Status**: 🔒 *Reserved for later use*
 
 **Description**: Retrieve map configuration for processing.
 
@@ -431,11 +432,33 @@ http://127.0.0.1:8000/dashboard/
 - Real-time server status monitoring
 - Active maps and queue display
 - Server control buttons (Restart, Cancel Task)
-- Auto-refresh every 5 seconds
+- Scrollable tables with sticky headers
+- Auto-refresh (configurable 2-120 seconds)
+- Dark/Light mode toggle
 
 ---
 
-### 11. Django Admin
+### 11. Task History Page
+**Method**: `GET`  
+**URL**: `/task-history/`
+
+**Description**: Full task history with search and pagination.
+
+**Access**: Open in browser
+```
+http://127.0.0.1:8000/task-history/
+```
+
+**Features**:
+- View all task history (not limited to 50)
+- Real-time search filter (Map ID, Server, Status)
+- Client-side pagination (10/25/50/100/All per page)
+- Scrollable table with sticky headers
+- Dark/Light mode toggle
+
+---
+
+### 12. Django Admin
 **Method**: `GET`  
 **URL**: `/admin/`
 

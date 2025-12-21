@@ -5,7 +5,7 @@ This project implements a system where multiple Unity Linux server builds connec
 ## Prerequisites
 
 - Python 3.10+
-- Redis (running on default port 6379)
+- Redis (running on port 16379)
 - Unity (for the client script)
 
 ## Setup
@@ -21,7 +21,18 @@ This project implements a system where multiple Unity Linux server builds connec
     ```
 
 3.  **Run Redis:**
-    Ensure Redis is running. On Windows, you might use WSL or a Docker container.
+    Ensure Redis is running on port 16379.
+    
+    **Docker (Windows/Ubuntu):**
+    ```bash
+    docker run -d --name redis -p 16379:6379 --restart always redis:latest
+    ```
+    
+    **Native Ubuntu:**
+    ```bash
+    # Edit /etc/redis/redis.conf and set: port 16379
+    sudo systemctl restart redis
+    ```
 
 4.  **Run Django Server:**
     ```bash
@@ -47,6 +58,8 @@ This project implements a system where multiple Unity Linux server builds connec
 - **Command Sending:** Django can send commands (`start_game`, `stop_game`, etc.) to Unity.
 - **Status Updates:** Unity sends periodic heartbeats with CPU and player count.
 - **Celery Automation:** Background tasks for match allocation and health checks.
+- **Dashboard:** Real-time server monitoring at `/dashboard/`.
+- **Task History:** Full task history with search & pagination at `/task-history/`.
 
 ## API / Usage
 
