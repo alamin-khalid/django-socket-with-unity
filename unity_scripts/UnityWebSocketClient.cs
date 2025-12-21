@@ -9,8 +9,8 @@ using System.Threading.Tasks;
 [RequireComponent(typeof(PerformanceTracker))]
 public class UnityWebSocketClient : MonoBehaviour
 {
-    // private string backendWsUrl = "ws://103.12.214.244/ws/server/";
-    private string backendWsUrl = "ws://127.0.0.1:8000/ws/server/";
+    private string backendWsUrl = "ws://103.12.214.244/ws/server/";
+    // private string backendWsUrl = "ws://127.0.0.1:8000/ws/server/";
 
 
     [Header("Server Identity")] public string serverId;
@@ -18,7 +18,7 @@ public class UnityWebSocketClient : MonoBehaviour
     private WebSocket ws;
     private string publicIP = "";
 
-    public float heartbeatTime = 5f;
+    private float heartbeatTime = 5f;
     private WaitForSeconds heartbeatWait;
 
     public bool IsInitialized { get; private set; }
@@ -333,15 +333,15 @@ public class UnityWebSocketClient : MonoBehaviour
             nextRoundTimeStr,
             "yyyy-MM-dd HH:mm:ss",
             System.Globalization.CultureInfo.InvariantCulture,
-            System.Globalization.DateTimeStyles.AssumeUniversal | 
+            System.Globalization.DateTimeStyles.AssumeUniversal |
             System.Globalization.DateTimeStyles.AdjustToUniversal
         );
 
         ws.Send(new JObject
         {
             ["type"] = "job_done",
-            ["map_id"] = mapId.ToString(),  // Convert to string for Django CharField
-            ["next_round_time"] = nextRoundTime.ToString("O")  // ISO 8601 format with Z suffix
+            ["map_id"] = mapId.ToString(), // Convert to string for Django CharField
+            ["next_round_time"] = nextRoundTime.ToString("O") // ISO 8601 format with Z suffix
         }.ToString());
 
         Debug.Log($"[Job Done] ✅ Sent for {mapId}, next: {nextRoundTime:O}");

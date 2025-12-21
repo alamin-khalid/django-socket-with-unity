@@ -69,10 +69,11 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
             await self.handle_heartbeat(content)
 
         elif message_type == 'status_update':
-            await self.handle_status_update(content)
+            await self.handle_status_update_wrapper(content)  # Use wrapper to trigger assignment on idle
 
         elif message_type == 'job_done':
             await self.handle_job_done(content)
+            await self.trigger_assignment()  # Trigger assignment after job completion
 
         elif message_type == 'error':
             await self.handle_error(content)
