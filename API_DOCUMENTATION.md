@@ -228,7 +228,8 @@ curl -X DELETE http://127.0.0.1:8000/api/map/remove/planet_123/
 
 ### 5. Submit Result
 **Method**: `POST`  
-**URL**: `/api/result/`
+**URL**: `/api/result/`  
+**Status**: 🔒 *Reserved for later use*
 
 **Description**: Submit game results from Unity server (triggers async processing).
 
@@ -269,7 +270,8 @@ curl -X POST http://127.0.0.1:8000/api/result/ \
 
 ### 6. List Servers
 **Method**: `GET`  
-**URL**: `/api/servers/`
+**URL**: `/api/servers/`  
+**Status**: 🔒 *Reserved for later use*
 
 **Description**: Get all server statuses with metrics.
 
@@ -307,7 +309,8 @@ curl http://127.0.0.1:8000/api/servers/
 
 ### 7. Server Detail
 **Method**: `GET`  
-**URL**: `/api/server/{server_id}/`
+**URL**: `/api/server/{server_id}/`  
+**Status**: 🔒 *Reserved for later use*
 
 **Description**: Get detailed information about a specific server.
 
@@ -343,7 +346,8 @@ curl http://127.0.0.1:8000/api/server/unity_192_168_1_100/
 
 ### 8. Queue Status
 **Method**: `GET`  
-**URL**: `/api/queue/`
+**URL**: `/api/queue/`  
+**Status**: 🔒 *Reserved for later use*
 
 **Description**: Get queue statistics for monitoring.
 
