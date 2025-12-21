@@ -4,8 +4,12 @@ from . import views
 urlpatterns = [
     # REST API Endpoints - Active
     path('planet/create/', views.create_planet, name='create_planet'),
+    path('map/create/', views.create_planet, name='create_map'),  # Alias for planet/create/
     path('planet/remove/<str:planet_id>/', views.remove_planet, name='remove_planet'),
     path('planet/remove/<str:planet_id>', views.remove_planet),  # Allow without trailing slash
+    
+    path('map/remove/<str:planet_id>/', views.remove_planet, name='remove_map'),  # Alias for planet/remove/
+    path('map/remove/<str:planet_id>', views.remove_planet),  # Alias without trailing slash
     path('command/', views.send_server_command, name='send_command'),
     path('force-assign/', views.force_assign, name='force_assign'),
     

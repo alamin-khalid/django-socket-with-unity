@@ -32,7 +32,7 @@ def create_planet(request):
     """
     POST /api/planet/create/
     Body: {
-        'planet_id': 'planet_123',  # Required
+        'planet_id': 'planet_123',  # Required (or use 'map_id' as alias)
         'season_id': 1,              # Required
     }
     Creates a new planet with validation to prevent duplicates.
@@ -41,12 +41,13 @@ def create_planet(request):
     import re
     from .redis_queue import add_planet_to_queue
     
-    planet_id = request.data.get('planet_id')
+    # Accept both 'planet_id' and 'map_id' (map_id is an alias for planet_id)
+    planet_id = request.data.get('planet_id') or request.data.get('map_id')
     
     # Validate that planet_id is provided
     if not planet_id:
         return Response(
-            {'error': 'planet_id is required'}, 
+            {'error': 'planet_id (or map_id) is required'}, 
             status=status.HTTP_400_BAD_REQUEST
         )
     
@@ -73,6 +74,10 @@ def create_planet(request):
     
     # Prepare data for serializer
     data = request.data.copy()
+    
+    # If map_id was used, set planet_id for the serializer
+    if 'map_id' in request.data and 'planet_id' not in request.data:
+        data['planet_id'] = planet_id
     
     # Always set next_round_time to NOW
     data['next_round_time'] = timezone.now().isoformat()

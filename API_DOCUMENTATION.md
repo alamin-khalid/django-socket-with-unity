@@ -43,14 +43,14 @@ ws.Connect();
 // Job Completion
 {
   "type": "job_done",
-  "map_id": "map_001",
+  "planet_id": "planet_001",
   "next_round_time": "2025-12-18T12:00:00Z"  // ISO 8601 datetime string for next round
 }
 
 // Error Report
 {
   "type": "error",
-  "error": "Failed to load map assets"
+  "error": "Failed to load planet assets"
 }
 
 // Graceful Disconnect
@@ -65,7 +65,7 @@ ws.Connect();
 // Job Assignment
 {
   "type": "assign_job",
-  "map_id": "map_001",
+  "planet_id": "planet_001",
   "season_id": 1,
   "round_id": 5
 }
@@ -87,22 +87,22 @@ ws.Connect();
 
 ## REST API Endpoints
 
-### 2. Get Map Data
+### 2. Get Planet Data
 **Method**: `GET`  
-**URL**: `/api/map/{map_id}/`  
+**URL**: `/api/planet/{planet_id}/`  
 **Status**: 🔒 *Reserved for later use*
 
-**Description**: Retrieve map configuration for processing.
+**Description**: Retrieve planet configuration for processing.
 
 **Example**:
 ```bash
-curl http://127.0.0.1:8000/api/map/map_001/
+curl http://127.0.0.1:8000/api/planet/planet_001/
 ```
 
 **Response**:
 ```json
 {
-  "map_id": "map_001",
+  "planet_id": "planet_001",
   "season_id": 1,
   "round_id": 5,
   "current_round_number": 5,
@@ -115,22 +115,30 @@ curl http://127.0.0.1:8000/api/map/map_001/
 
 ---
 
-### 3. Create Map
+### 3. Create Planet
 **Method**: `POST`  
-**URL**: `/api/map/create/`
+**URL**: `/api/planet/create/` or `/api/map/create/`
 
-**Description**: Create a new map/planet by providing planetId and season.
+**Description**: Create a new planet by providing planet_id (or map_id) and season.
 
 **Request Body**:
 ```json
 {
-  "map_id": "planet_123",
+  "map_id": "79001",
+  "season_id": 34
+}
+```
+
+Or alternatively:
+```json
+{
+  "planet_id": "planet_123",
   "season_id": 1
 }
 ```
 
 **Required Fields**:
-- `map_id` (string): Unique planet/map identifier (also called planetId)
+- `planet_id` OR `map_id` (string): Unique planet identifier (`map_id` is an alias for `planet_id`)
   - Must contain only letters, numbers, underscores, and hyphens
   - Maximum 100 characters
 - `season_id` (integer): Season identifier
@@ -139,14 +147,14 @@ curl http://127.0.0.1:8000/api/map/map_001/
 - `round_id` (integer): Round identifier, defaults to 0 if not provided
 - `current_round_number` (integer): Current round number, defaults to 0 if not provided
 
-**Note**: Created maps are automatically added to the processing queue with `next_round_time` set to **NOW**, so they will be picked up by idle servers immediately.
+**Note**: Created planets are automatically added to the processing queue with `next_round_time` set to **NOW**, so they will be picked up by idle servers immediately.
 
 **Example**:
 ```bash
-curl -X POST http://127.0.0.1:8000/api/map/create/ \
+curl -X POST http://127.0.0.1:8000/api/planet/create/ \
   -H "Content-Type: application/json" \
   -d '{
-    "map_id": "planet_123",
+    "planet_id": "planet_123",
     "season_id": 1
   }'
 ```
@@ -154,7 +162,7 @@ curl -X POST http://127.0.0.1:8000/api/map/create/ \
 **Response (Success - 201 Created)**:
 ```json
 {
-  "map_id": "planet_123",
+  "planet_id": "planet_123",
   "season_id": 1,
   "round_id": 0,
   "current_round_number": 0,
@@ -168,14 +176,14 @@ curl -X POST http://127.0.0.1:8000/api/map/create/ \
 **Response (Duplicate - 409 Conflict)**:
 ```json
 {
-  "error": "Map with map_id \"planet_123\" already exists"
+  "error": "Planet with planet_id \"planet_123\" already exists"
 }
 ```
 
 **Response (Missing Field - 400 Bad Request)**:
 ```json
 {
-  "error": "map_id (planetId) is required"
+  "error": "planet_id is required"
 }
 ```
 
@@ -188,41 +196,41 @@ curl -X POST http://127.0.0.1:8000/api/map/create/ \
 
 ---
 
-### 4. Remove Map
+### 4. Remove Planet
 **Method**: `DELETE`  
-**URL**: `/api/map/remove/{map_id}/`
+**URL**: `/api/planet/remove/{planet_id}/` or `/api/map/remove/{planet_id}/`
 
-**Description**: Remove a planet/map from the system. The map will also be removed from the Redis processing queue.
+**Description**: Remove a planet from the system. The planet will also be removed from the Redis processing queue.
 
 **Example**:
 ```bash
-curl -X DELETE http://127.0.0.1:8000/api/map/remove/planet_123/
+curl -X DELETE http://127.0.0.1:8000/api/planet/remove/planet_123/
 ```
 
 **Response (Success - 200 OK)**:
 ```json
 {
   "status": "success",
-  "message": "Map \"planet_123\" has been removed"
+  "message": "Planet \"planet_123\" has been removed"
 }
 ```
 
 **Response (Not Found - 404)**:
 ```json
 {
-  "error": "Map \"planet_123\" not found"
+  "error": "Planet \"planet_123\" not found"
 }
 ```
 
 **Response (Processing - 409 Conflict)**:
 ```json
 {
-  "error": "Cannot remove map \"planet_123\" while it is being processed"
+  "error": "Cannot remove planet \"planet_123\" while it is being processed"
 }
 ```
 
 > [!NOTE]
-> Maps that are currently being processed (status = `processing`) cannot be removed. Wait for the job to complete or cancel it first.
+> Planets that are currently being processed (status = `processing`) cannot be removed. Wait for the job to complete or cancel it first.
 
 ---
 
@@ -236,14 +244,14 @@ curl -X DELETE http://127.0.0.1:8000/api/map/remove/planet_123/
 **Request Body**:
 ```json
 {
-  "map_id": "map_001",
+  "planet_id": "planet_001",
   "server_id": "unity_192_168_1_100",
   "next_round_time": "2025-12-18T12:00:00Z"
 }
 ```
 
 **Required Fields**:
-- `map_id` (string): Map identifier
+- `planet_id` (string): Planet identifier
 - `server_id` (string): Server identifier
 - `next_round_time` (string): ISO 8601 datetime string for when the next round should be processed
 
@@ -252,7 +260,7 @@ curl -X DELETE http://127.0.0.1:8000/api/map/remove/planet_123/
 curl -X POST http://127.0.0.1:8000/api/result/ \
   -H "Content-Type: application/json" \
   -d '{
-    "map_id": "map_001",
+    "planet_id": "planet_001",
     "server_id": "unity_192_168_1_100",
     "next_round_time": "2025-12-18T12:00:00Z"
   }'
@@ -297,9 +305,9 @@ curl http://127.0.0.1:8000/api/servers/
     "current_task_id": null,
     "connected_at": "2025-12-10T04:00:00Z",
     "disconnected_at": null,
-    "total_assigned_map": 50,
-    "total_completed_map": 45,
-    "total_failed_map": 5,
+    "total_assigned_planet": 50,
+    "total_completed_planet": 45,
+    "total_failed_planet": 5,
     "uptime_seconds": 3600
   }
 ]
@@ -332,12 +340,12 @@ curl http://127.0.0.1:8000/api/server/unity_192_168_1_100/
   "max_cpu_usage": 75.0,
   "max_ram_usage": 85.0,
   "disk_usage": 60.0,
-  "current_task_id": "map_001",
+  "current_task_id": "planet_001",
   "connected_at": "2025-12-10T04:00:00Z",
   "disconnected_at": null,
-  "total_assigned_map": 50,
-  "total_completed_map": 45,
-  "total_failed_map": 5,
+  "total_assigned_planet": 50,
+  "total_completed_planet": 45,
+  "total_failed_planet": 5,
   "uptime_seconds": 3600
 }
 ```
@@ -364,8 +372,8 @@ curl http://127.0.0.1:8000/api/queue/
   "idle_servers": 3,
   "busy_servers": 2,
   "offline_servers": 1,
-  "queued_maps": 10,
-  "processing_maps": 5
+  "queued_planets": 10,
+  "processing_planets": 5
 }
 ```
 
@@ -419,13 +427,34 @@ curl -X POST http://127.0.0.1:8000/api/command/ \
 
 ---
 
+### 10. Force Assign
+**Method**: `POST`  
+**URL**: `/api/force-assign/`
+
+**Description**: Manually trigger planet assignment to idle servers.
+
+**Example**:
+```bash
+curl -X POST http://127.0.0.1:8000/api/force-assign/
+```
+
+**Response (Success)**:
+```json
+{
+  "status": "success",
+  "message": "Assignment triggered"
+}
+```
+
+---
+
 ## Web Interface
 
-### 10. Dashboard
+### 11. Dashboard
 **Method**: `GET`  
 **URL**: `/dashboard/`
 
-**Description**: Admin dashboard showing server status and map queue.
+**Description**: Admin dashboard showing server status and planet queue.
 
 **Access**: Open in browser
 ```
@@ -434,7 +463,7 @@ http://127.0.0.1:8000/dashboard/
 
 **Features**:
 - Real-time server status monitoring
-- Active maps and queue display
+- Active planets and queue display
 - Server control buttons (Restart, Cancel Task)
 - Scrollable tables with sticky headers
 - Auto-refresh (configurable 2-120 seconds)
@@ -442,7 +471,7 @@ http://127.0.0.1:8000/dashboard/
 
 ---
 
-### 11. Task History Page
+### 12. Task History Page
 **Method**: `GET`  
 **URL**: `/task-history/`
 
@@ -455,14 +484,14 @@ http://127.0.0.1:8000/task-history/
 
 **Features**:
 - View all task history (not limited to 50)
-- Real-time search filter (Map ID, Server, Status)
+- Real-time search filter (Planet ID, Server, Status)
 - Client-side pagination (10/25/50/100/All per page)
 - Scrollable table with sticky headers
 - Dark/Light mode toggle
 
 ---
 
-### 12. Django Admin
+### 13. Django Admin
 **Method**: `GET`  
 **URL**: `/admin/`
 
@@ -482,14 +511,14 @@ All endpoints return standard HTTP status codes:
 **400 Bad Request**:
 ```json
 {
-  "error": "Missing required field: map_id"
+  "error": "Missing required field: planet_id"
 }
 ```
 
 **404 Not Found**:
 ```json
 {
-  "error": "Map not found"
+  "error": "Planet not found"
 }
 ```
 
@@ -515,7 +544,7 @@ All endpoints return standard HTTP status codes:
 **Critical Requirements for `job_done` message:**
 
 1. **Field Names Must Match:**
-   - Use `map_id` (NOT `planet_id`)
+   - Use `planet_id` (this is the correct field name)
    - Use `next_round_time` (NOT `next_calculation_time`)
 
 2. **DateTime Format:**
@@ -532,18 +561,18 @@ All endpoints return standard HTTP status codes:
 // ⚠️ THIS METHOD IS MISSING FROM CURRENT UnityWebSocketClient.cs
 // Add this to the "OUTGOING MESSAGES" section around line 307
 
-public void SendJobDone(string mapId, DateTime nextRoundTime)
+public void SendJobDone(string planetId, DateTime nextRoundTime)
 {
     if (ws == null || !ws.IsAlive) return;
 
     ws.Send(new JObject
     {
         ["type"] = "job_done",
-        ["map_id"] = mapId,  // ✅ Correct field name (not planet_id)
+        ["planet_id"] = planetId,  // ✅ Correct field name
         ["next_round_time"] = nextRoundTime.ToString("O")  // ✅ ISO 8601 format
     }.ToString());
     
-    Debug.Log($"[Job Done] ✅ Sent completion for {mapId}, next: {nextRoundTime:O}");
+    Debug.Log($"[Job Done] ✅ Sent completion for {planetId}, next: {nextRoundTime:O}");
     
     // Mark server as idle for new assignments
     SendStatusUpdate("idle");
@@ -563,8 +592,8 @@ serverId = $"unity_{publicIP.Replace(".", "_")}";
 
 2. **Update SendFailed consistency (line 315):**
 ```csharp
-// Consider using "map_id" instead of "planet_id" for consistency
-["map_id"] = planetId.ToString(),
+// Use "planet_id" for consistency
+["planet_id"] = planetId.ToString(),
 ```
 
 ---
@@ -586,11 +615,16 @@ websocat ws://127.0.0.1:8000/ws/server/test_server/
 
 **Test REST API**:
 ```bash
-# List all servers
-curl http://127.0.0.1:8000/api/servers/
+# Create a planet
+curl -X POST http://127.0.0.1:8000/api/planet/create/ \
+  -H "Content-Type: application/json" \
+  -d '{"planet_id": "planet_001", "season_id": 1}'
 
-# Get queue status
-curl http://127.0.0.1:8000/api/queue/
+# Remove a planet
+curl -X DELETE http://127.0.0.1:8000/api/planet/remove/planet_001/
+
+# Force assignment
+curl -X POST http://127.0.0.1:8000/api/force-assign/
 
 # Send command
 curl -X POST http://127.0.0.1:8000/api/command/ \
@@ -623,10 +657,10 @@ public class ServerConnection : MonoBehaviour
     }
     
     // Called when job processing completes
-    private void OnJobComplete(string mapId, DateTime nextRoundTime)
+    private void OnJobComplete(string planetId, DateTime nextRoundTime)
     {
         // ⚠️ This method must be added to UnityWebSocketClient
-        wsClient.SendJobDone(mapId, nextRoundTime);
+        wsClient.SendJobDone(planetId, nextRoundTime);
     }
     
     // Handle errors during processing
