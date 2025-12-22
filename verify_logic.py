@@ -1,6 +1,6 @@
-from game_manager.assignment_service import assign_available_maps
+from game_manager.assignment_service import assign_available_planets
 from game_manager.models import Planet, UnityServer
-from game_manager.redis_queue import add_map_to_queue, get_queue_size
+from game_manager.redis_queue import add_planet_to_queue, get_queue_size
 from django.utils import timezone
 
 print("--- Starting Verification ---")
@@ -11,7 +11,7 @@ UnityServer.objects.filter(server_id__startswith="unity_debug_").delete()
 
 # 2. Create a Map
 m = Planet.objects.create(map_id="debug_map_test", season_id=1, next_round_time=timezone.now())
-add_map_to_queue(m.map_id, m.next_round_time)
+add_planet_to_queue(m.map_id, m.next_round_time)
 print(f"Map created. Queue size: {get_queue_size()}")
 
 # 3. Create an Idle Server
@@ -20,7 +20,7 @@ print(f"Server created: {s.server_id} ({s.status})")
 
 # 4. Run Assignment
 print("Running assignment...")
-result = assign_available_maps()
+result = assign_available_planets()
 print(f"Result: {result}")
 
 # 5. Verify

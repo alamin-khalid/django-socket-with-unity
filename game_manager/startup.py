@@ -1,6 +1,6 @@
 from django.utils import timezone
 from .models import UnityServer, Planet, TaskHistory
-from .redis_queue import add_map_to_queue
+from .redis_queue import add_planet_to_queue
 
 def reset_all_servers_offline():
     """
@@ -23,20 +23,20 @@ def reset_all_servers_offline():
     for server in active_servers:
         # Check if server had a task
         if server.current_task:
-            map_obj = server.current_task
-            print(f"--- [Startup] Recovering job {map_obj.map_id} from {server.server_id}")
+            planet_obj = server.current_task
+            print(f"--- [Startup] Recovering job {planet_obj.planet_id} from {server.server_id}")
             
-            # Reset map to queued
-            map_obj.status = 'queued'
-            map_obj.processing_server = None
-            map_obj.save()
+            # Reset planet to queued
+            planet_obj.status = 'queued'
+            planet_obj.processing_server = None
+            planet_obj.save()
             
             # Re-add to queue
-            add_map_to_queue(map_obj.map_id, map_obj.next_round_time)
+            add_planet_to_queue(planet_obj.planet_id, planet_obj.next_round_time)
             
             # Update history
             TaskHistory.objects.filter(
-                map=map_obj,
+                planet=planet_obj,
                 server=server,
                 status='started'
             ).update(
@@ -53,3 +53,4 @@ def reset_all_servers_offline():
         server.save()
         
     print(f"--- [Startup] Marked {count} servers offline, recovered {recovered_jobs} jobs ---")
+

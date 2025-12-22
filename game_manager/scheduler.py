@@ -14,7 +14,7 @@ _scheduler_thread = None
 
 def assignment_loop():
     """
-    Background loop that checks and assigns planets every second.
+    Background loop that checks and assigns planets every 2 seconds.
     """
     global _scheduler_running
     logger.info("[Scheduler] ✅ Background assignment scheduler started")
@@ -23,14 +23,13 @@ def assignment_loop():
         try:
             from .assignment_service import assign_available_planets
             result = assign_available_planets()
-            # Log all results for visibility
-            logger.info(f"[Scheduler] Check result: {result}")
-            if result and "No" not in str(result):
+            # Only log when something was actually assigned
+            if result and "Assigned" in str(result) and "0" not in str(result):
                 logger.info(f"[Scheduler] {result}")
         except Exception as e:
             logger.error(f"[Scheduler] Error: {e}", exc_info=True)
         
-        time.sleep(1)  # Check every second
+        time.sleep(2)  # Check every 2 seconds
     
     logger.info("[Scheduler] Background assignment scheduler stopped")
 

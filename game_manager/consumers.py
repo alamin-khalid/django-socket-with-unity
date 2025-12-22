@@ -67,6 +67,11 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
 
         if message_type == 'heartbeat':
             await self.handle_heartbeat(content)
+            # Send pong response to confirm 2-way communication
+            await self.send_json({
+                'type': 'pong',
+                'server_time': timezone.now().isoformat()
+            })
 
         elif message_type == 'status_update':
             await self.handle_status_update_wrapper(content)  # Use wrapper to trigger assignment on idle

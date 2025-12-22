@@ -44,14 +44,14 @@ def assign_available_planets():
     idle_servers = list(UnityServer.objects.filter(status='idle').order_by('total_completed_planet'))
     
     if not idle_servers:
-        # Debug: Why no servers?
+        # Debug: Why no servers? (only log at debug level to avoid spam)
         all_counts = {
             'idle': UnityServer.objects.filter(status='idle').count(),
             'busy': UnityServer.objects.filter(status='busy').count(),
             'offline': UnityServer.objects.filter(status='offline').count(),
             'total': UnityServer.objects.count()
         }
-        logger.warning(f"No idle servers! Stats: {all_counts}")
+        logger.debug(f"No idle servers. Stats: {all_counts}")
         
         # No servers available
         return f"No idle servers for {len(due_planet_ids)} due planets"
