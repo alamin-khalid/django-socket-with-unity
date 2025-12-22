@@ -9,8 +9,8 @@ using System.Threading.Tasks;
 [RequireComponent(typeof(PerformanceTracker))]
 public class UnityWebSocketClient : MonoBehaviour
 {
-    private string backendWsUrl = "ws://103.12.214.244/ws/server/";
-    // private string backendWsUrl = "ws://127.0.0.1:8000/ws/server/";
+    // private string backendWsUrl = "ws://103.12.214.244/ws/server/";
+    private string backendWsUrl = "ws://127.0.0.1:8000/ws/server/";
 
 
     [Header("Server Identity")] public string serverId;
@@ -234,7 +234,6 @@ public class UnityWebSocketClient : MonoBehaviour
         {
             JObject data = JObject.Parse(message);
             string type = data["type"]?.ToString();
-            Debug.Log("Comand: " + type);
             switch (type)
             {
                 case "assign_job":
@@ -243,6 +242,9 @@ public class UnityWebSocketClient : MonoBehaviour
 
                 case "command":
                     HandleCommand(data);
+                    break;
+                case "pong":
+                    Debug.Log("Server returned PONG");
                     break;
 
                 default:
@@ -297,7 +299,13 @@ public class UnityWebSocketClient : MonoBehaviour
         Debug.Log($"[Command] {command}");
 
         if (command == "stop_server")
-            Application.Quit();
+        {
+            // Application.Quit();
+        }
+        else if (command == "reboot_server")
+        {
+            // Application.Quit();
+        }
     }
 
     // ===============================
@@ -349,14 +357,13 @@ public class UnityWebSocketClient : MonoBehaviour
         }.ToString());
     }
 
-    public void SendJobDone(int planetId, string nextRoundTimeStr)
+    public void SendJobDone(JobDoneInfo info)
     {
         if (ws == null || !ws.IsAlive) return;
 
         // Parse the datetime string as UTC
         DateTime nextRoundTime = DateTime.ParseExact(
-            nextRoundTimeStr,
-            "yyyy-MM-dd HH:mm:ss",
+            info.nextRoundTimeStr, "yyyy-MM-dd HH:mm:ss",
             System.Globalization.CultureInfo.InvariantCulture,
             System.Globalization.DateTimeStyles.AssumeUniversal |
             System.Globalization.DateTimeStyles.AdjustToUniversal
@@ -365,11 +372,14 @@ public class UnityWebSocketClient : MonoBehaviour
         ws.Send(new JObject
         {
             ["type"] = "job_done",
-            ["planet_id"] = planetId.ToString(),
+            ["planet_id"] = info.planetId.ToString(),
+            ["season_id"] = info.seasonId.ToString(),
+            ["round_number"] = info.currentRoundNumber.ToString(),
+            ["round_id"] = info.roundId.ToString(),
             ["next_round_time"] = nextRoundTime.ToString("O") // ISO 8601 format with Z suffix
         }.ToString());
 
-        Debug.Log($"[Job Done] ✅ Sent for {planetId}, next: {nextRoundTime:O}");
+        Debug.Log($"[Job Done] ✅ Sent for {info.planetId}, next: {nextRoundTime:O}");
 
         // Mark server as idle for new assignments
         SendStatusUpdate("idle");
@@ -431,4 +441,13 @@ public class PlanetCalculateOrder
     public int planetId;
     public int seasonId;
     public int roundId;
+}
+
+public class JobDoneInfo
+{
+    public int planetId;
+    public int seasonId;
+    public int roundId;
+    public int currentRoundNumber;
+    public string nextRoundTimeStr;
 }
