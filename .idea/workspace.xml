@@ -6,13 +6,6 @@
   <component name="ChangeListManager">
     <list default="true" id="3804a2bc-4c31-4889-a28a-14dba2ad9f31" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/game_manager/assignment_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/game_manager/assignment_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/game_manager/consumers.py" beforeDir="false" afterPath="$PROJECT_DIR$/game_manager/consumers.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/game_manager/models.py" beforeDir="false" afterPath="$PROJECT_DIR$/game_manager/models.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/game_manager/tasks.py" beforeDir="false" afterPath="$PROJECT_DIR$/game_manager/tasks.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/game_manager/templates/game_manager/dashboard.html" beforeDir="false" afterPath="$PROJECT_DIR$/game_manager/templates/game_manager/dashboard.html" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/server_orchestrator/settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/server_orchestrator/settings.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/unity_scripts/UnityWebSocketClient.cs" beforeDir="false" afterPath="$PROJECT_DIR$/unity_scripts/UnityWebSocketClient.cs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -45,7 +38,7 @@
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;Khalid&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
     &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
     &quot;last_opened_file_path&quot;: &quot;D:/Krada Pyhton/django-socket-with-unity&quot;,
     &quot;settings.editor.selected.configurable&quot;: &quot;settings.sync&quot;

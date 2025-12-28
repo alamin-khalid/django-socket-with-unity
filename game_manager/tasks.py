@@ -399,9 +399,34 @@ def check_server_health() -> str:
     if stale_servers.exists():
         count = stale_servers.count()
         logger.warning(f"Marked {count} servers offline, recovered {recovered_jobs} jobs")
-        return f"Marked {count} servers offline, recovered {recovered_jobs} jobs"
+        result = f"Marked {count} servers offline, recovered {recovered_jobs} jobs"
+    else:
+        result = "All servers healthy"
     
-    return "All servers healthy"
+    # --- Auto-recover errored planets ---
+    # Planets stuck in 'error' status are automatically reset and requeued
+    errored_planets = Planet.objects.filter(status='error')
+    recovered_errored = 0
+    
+    for planet_obj in errored_planets:
+        logger.info(
+            f"Auto-recovering errored planet {planet_obj.planet_id} "
+            f"(was at retry {planet_obj.error_retry_count})"
+        )
+        planet_obj.status = 'queued'
+        planet_obj.error_retry_count = 0
+        planet_obj.processing_server = None
+        planet_obj.next_round_time = timezone.now()  # Immediate retry
+        planet_obj.save()
+        
+        add_planet_to_queue(planet_obj.planet_id, planet_obj.next_round_time)
+        recovered_errored += 1
+    
+    if recovered_errored > 0:
+        logger.info(f"Auto-recovered {recovered_errored} errored planets")
+        result += f", recovered {recovered_errored} errored planets"
+    
+    return result
 
 
 # =============================================================================
@@ -479,13 +504,22 @@ def handle_job_error(planet_id: str, server_id: str, error_message: str) -> Unio
         
         # --- Check Retry Limit ---
         if retry_count >= MAX_RETRIES:
-            logger.error(
-                f"Planet {planet_id} exceeded max retries ({MAX_RETRIES}), marking as error"
+            # Auto-reset and requeue with cooldown instead of staying in error state
+            COOLDOWN_SECONDS = 30
+            logger.warning(
+                f"Planet {planet_id} exceeded max retries ({MAX_RETRIES}), "
+                f"auto-resetting and re-queueing with {COOLDOWN_SECONDS}s cooldown"
             )
-            planet_obj.status = 'error'
+            planet_obj.status = 'queued'
             planet_obj.processing_server = None
+            planet_obj.error_retry_count = 0  # Reset retry counter
+            planet_obj.next_round_time = timezone.now() + timedelta(seconds=COOLDOWN_SECONDS)
             planet_obj.save()
-            return f"Planet {planet_id} exceeded max retries, marked as error"
+            
+            # Add back to Redis queue with cooldown delay
+            add_planet_to_queue(planet_obj.planet_id, planet_obj.next_round_time)
+            
+            return f"Planet {planet_id} auto-reset after max retries, requeued with {COOLDOWN_SECONDS}s cooldown"
         
         # --- Immediate Retry ---
         planet_obj.status = 'queued'

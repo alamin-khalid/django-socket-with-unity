@@ -108,7 +108,7 @@ CELERY_BEAT_SCHEDULE = {
     },
     'check-server-health': {
         'task': 'game_manager.tasks.check_server_health',
-        'schedule': 30.0,  # Every 30 seconds
+        'schedule': 5.0,  # Every 5 seconds (for faster error recovery)
     },
 }
 

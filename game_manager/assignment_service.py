@@ -224,21 +224,30 @@ def _recover_missed_planets() -> List[str]:
         
         logger.info(f"Recovered {len(recovered_ids)} planets from DB fallback")
     
-    # --- NOTE: Error planets are NOT auto-recovered ---
-    # Planets in 'error' status have exceeded max retries (5) and require
-    # manual intervention. This prevents infinite retry loops.
-    # 
-    # To manually retry an error planet:
-    # 1. Reset via Django admin, or
-    # 2. Call reset_planet_retry_count task, or
-    # 3. Use API endpoint (if implemented)
-    #
-    # We just log a warning if there are error planets for visibility.
-    error_count = Planet.objects.filter(status='error').count()
-    if error_count > 0:
+    # --- Auto-recover error planets ---
+    # Planets in 'error' status have exceeded max retries (5) but we now
+    # automatically reset them and re-queue for continuous processing.
+    error_planets = Planet.objects.filter(status='error')[:20]
+    
+    if error_planets.exists():
         logger.warning(
-            f"Found {error_count} planets in ERROR state requiring manual intervention"
+            f"Found {error_planets.count()} planets in ERROR state. "
+            f"Auto-recovering..."
         )
+        
+        for planet_obj in error_planets:
+            # Reset to queued state
+            planet_obj.status = 'queued'
+            planet_obj.error_retry_count = 0
+            planet_obj.processing_server = None
+            planet_obj.next_round_time = timezone.now()
+            planet_obj.save()
+            
+            # Add to Redis queue for immediate processing
+            add_planet_to_queue(planet_obj.planet_id, planet_obj.next_round_time)
+            recovered_ids.append(planet_obj.planet_id)
+            
+            logger.info(f"Auto-recovered error planet {planet_obj.planet_id}")
     
     return recovered_ids
 
