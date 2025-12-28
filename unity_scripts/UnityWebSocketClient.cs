@@ -9,8 +9,8 @@ using System.Threading.Tasks;
 [RequireComponent(typeof(PerformanceTracker))]
 public class UnityWebSocketClient : MonoBehaviour
 {
-    // private string backendWsUrl = "ws://103.12.214.244/ws/server/";
-    private string backendWsUrl = "ws://127.0.0.1:8000/ws/server/";
+    private string backendWsUrl = "ws://103.12.214.244/ws/server/";
+    // private string backendWsUrl = "ws://127.0.0.1:8000/ws/server/";
 
 
     [Header("Server Identity")] public string serverId;
@@ -361,14 +361,6 @@ public class UnityWebSocketClient : MonoBehaviour
     {
         if (ws == null || !ws.IsAlive) return;
 
-        // Parse the datetime string as UTC
-        DateTime nextRoundTime = DateTime.ParseExact(
-            info.nextRoundTimeStr, "yyyy-MM-dd HH:mm:ss",
-            System.Globalization.CultureInfo.InvariantCulture,
-            System.Globalization.DateTimeStyles.AssumeUniversal |
-            System.Globalization.DateTimeStyles.AdjustToUniversal
-        );
-
         ws.Send(new JObject
         {
             ["type"] = "job_done",
@@ -376,10 +368,10 @@ public class UnityWebSocketClient : MonoBehaviour
             ["season_id"] = info.seasonId.ToString(),
             ["round_number"] = info.currentRoundNumber.ToString(),
             ["round_id"] = info.roundId.ToString(),
-            ["next_round_time"] = nextRoundTime.ToString("O") // ISO 8601 format with Z suffix
+            ["next_round_time"] = info.nextRoundTimeStr
         }.ToString());
 
-        Debug.Log($"[Job Done] ✅ Sent for {info.planetId}, next: {nextRoundTime:O}");
+        Debug.Log($"[Job Done] ✅ Sent for {info.planetId}, next: {info.currentRoundNumber}");
 
         // Mark server as idle for new assignments
         SendStatusUpdate("idle");
