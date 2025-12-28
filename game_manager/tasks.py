@@ -240,6 +240,22 @@ def handle_job_completion(
         # --- Parse Next Round Time ---
         next_round_time = parser.isoparse(next_round_time_str)
         
+        # Ensure timezone awareness
+        if next_round_time.tzinfo is None:
+            next_round_time = next_round_time.replace(tzinfo=timezone.utc)
+        
+        # --- Defensive: Handle past times ---
+        # If the received next_round_time is in the past (e.g., API returned
+        # roundEndTime that already passed during calculation), adjust to
+        # current time so it's immediately picked up by the scheduler.
+        now = timezone.now()
+        if next_round_time <= now:
+            logger.warning(
+                f"next_round_time {next_round_time} is in the past, "
+                f"scheduling immediately at {now}"
+            )
+            next_round_time = now
+        
         # --- Update Planet State ---
         planet_obj.status = 'queued'
         
