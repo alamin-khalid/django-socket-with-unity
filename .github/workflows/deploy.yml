@@ -34,4 +34,8 @@ jobs:
             python manage.py migrate --noinput
             python manage.py collectstatic --noinput
 
-            sudo systemctl restart gunicorn
+            # Restart all required services
+            sudo systemctl restart daphne
+            sudo systemctl restart celery-worker
+            sudo systemctl restart celery-beat
+
