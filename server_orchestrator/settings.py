@@ -93,13 +93,24 @@ REDIS_PORT = int(os.environ.get('REDIS_PORT', 16379))
 REDIS_DB = int(os.environ.get('REDIS_DB', 0))
 
 # Celery Configuration
-CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'memory://')
-# CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND')
+# Use Redis as message broker (same Redis instance as channel layer)
+CELERY_BROKER_URL = os.environ.get(
+    'CELERY_BROKER_URL', 
+    f"redis://{REDIS_HOST}:{REDIS_PORT}/1"  # Use DB 1 to separate from channel layer
+)
+CELERY_RESULT_BACKEND = os.environ.get(
+    'CELERY_RESULT_BACKEND',
+    f"redis://{REDIS_HOST}:{REDIS_PORT}/2"  # Use DB 2 for results
+)
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
-CELERY_TASK_ALWAYS_EAGER = True  # Run tasks immediately (useful for dev without worker)
+
+# Task execution mode:
+# - True (default for dev): Tasks run synchronously, no worker needed
+# - False (production): Tasks run async via Celery worker
+CELERY_TASK_ALWAYS_EAGER = os.environ.get('CELERY_EAGER', 'True') == 'True'
 
 CELERY_BEAT_SCHEDULE = {
     'process-due-planets': {

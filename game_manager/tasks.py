@@ -345,6 +345,8 @@ def check_server_health() -> str:
         'processing' state forever without recovery. This task requeues it
         so another healthy server can pick it up.
     """
+    from .recovery_service import recover_orphaned_job, recover_error_planets
+    
     HEARTBEAT_TIMEOUT_SECONDS = 30
     threshold = timezone.now() - timedelta(seconds=HEARTBEAT_TIMEOUT_SECONDS)
     
@@ -362,39 +364,14 @@ def check_server_health() -> str:
             f"(last heartbeat: {server.last_heartbeat})"
         )
         
-        # Mark offline
-        server.status = 'offline'
-        
-        # Recover orphaned job if server was processing one
-        if server.current_task:
-            planet_obj = server.current_task
-            logger.info(
-                f"Recovering job {planet_obj.planet_id} from offline server {server.server_id}"
-            )
-            
-            # Reset planet to queued state
-            planet_obj.status = 'queued'
-            planet_obj.processing_server = None
-            planet_obj.save()
-            
-            # Re-add to Redis queue for reassignment
-            add_planet_to_queue(planet_obj.planet_id, planet_obj.next_round_time)
-            
-            # Record timeout in TaskHistory
-            TaskHistory.objects.filter(
-                planet=planet_obj,
-                server=server,
-                status='started'
-            ).update(
-                status='timeout',
-                end_time=timezone.now(),
-                error_message='Server went offline during processing'
-            )
-            
+        # Use centralized recovery service for orphaned jobs
+        planet_id = recover_orphaned_job(server, "Server went offline during processing")
+        if planet_id:
             recovered_jobs += 1
         
-        server.current_task = None
-        server.save()
+        # Mark offline
+        server.status = 'offline'
+        server.save(update_fields=['status'])
     
     if stale_servers.exists():
         count = stale_servers.count()
@@ -403,27 +380,10 @@ def check_server_health() -> str:
     else:
         result = "All servers healthy"
     
-    # --- Auto-recover errored planets ---
-    # Planets stuck in 'error' status are automatically reset and requeued
-    errored_planets = Planet.objects.filter(status='error')
-    recovered_errored = 0
-    
-    for planet_obj in errored_planets:
-        logger.info(
-            f"Auto-recovering errored planet {planet_obj.planet_id} "
-            f"(was at retry {planet_obj.error_retry_count})"
-        )
-        planet_obj.status = 'queued'
-        planet_obj.error_retry_count = 0
-        planet_obj.processing_server = None
-        planet_obj.next_round_time = timezone.now()  # Immediate retry
-        planet_obj.save()
-        
-        add_planet_to_queue(planet_obj.planet_id, planet_obj.next_round_time)
-        recovered_errored += 1
+    # Use centralized recovery service for error planets
+    recovered_errored = recover_error_planets(limit=20)
     
     if recovered_errored > 0:
-        logger.info(f"Auto-recovered {recovered_errored} errored planets")
         result += f", recovered {recovered_errored} errored planets"
     
     return result

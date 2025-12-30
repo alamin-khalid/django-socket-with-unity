@@ -514,46 +514,21 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         """
         Mark server offline and recover any orphaned jobs.
         
-        Called on WebSocket disconnect. Handles the case where a server
-        crashes mid-job by returning the planet to the queue.
-        
-        Recovery Steps:
-        1. Find server record
-        2. If processing a job, reset planet to 'queued'
-        3. Re-add planet to Redis queue
-        4. Mark TaskHistory as 'timeout'
-        5. Mark server as 'offline'
+        Called on WebSocket disconnect. Uses centralized recovery_service
+        to handle job recovery.
         """
         try:
+            from .recovery_service import recover_orphaned_job
+            
             server = UnityServer.objects.filter(server_id=self.server_id).first()
             
             if not server:
                 return
             
-            # Recover orphaned job if server was processing one
-            if server.current_task:
-                planet = server.current_task
-                
-                # Reset planet to queued state
-                planet.status = 'queued'
-                planet.processing_server = None
-                planet.save()
-                
-                # Re-add to Redis queue for reassignment
-                from .redis_queue import add_planet_to_queue
-                add_planet_to_queue(planet.planet_id, planet.next_round_time)
-                
-                logger.info(f"[Recovery] ♻ Recovered job {planet.planet_id} from {self.server_id}")
-                
-                # Mark task as timed out
-                TaskHistory.objects.filter(
-                    planet=planet,
-                    server=server,
-                    status='started'
-                ).update(
-                    status='timeout',
-                    end_time=timezone.now()
-                )
+            # Use centralized recovery service for orphaned jobs
+            planet_id = recover_orphaned_job(server, "WebSocket disconnect")
+            if planet_id:
+                logger.info(f"[Recovery] ♻ Recovered job {planet_id} from {self.server_id}")
             
             # Mark server as offline
             server.mark_disconnected()

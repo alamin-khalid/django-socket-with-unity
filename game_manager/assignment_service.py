@@ -189,9 +189,8 @@ def _recover_missed_planets() -> List[str]:
     """
     Self-healing: recover planets that were missed by Redis.
     
-    Checks the Django database for:
-    1. Queued planets past their next_round_time (Redis desync)
-    2. Error planets that need retry (reset and requeue)
+    Checks the Django database for queued planets past their next_round_time
+    that are missing from Redis (e.g., after Redis restart).
     
     Returns:
         List[str]: Recovered planet IDs that were added to Redis queue
@@ -200,13 +199,17 @@ def _recover_missed_planets() -> List[str]:
         Redis is used as a scheduling cache, but Django DB is the source
         of truth. If Redis loses data (restart, memory pressure, etc.),
         this function ensures planets aren't permanently stuck.
+    
+    Note:
+        Error planet recovery is handled separately by check_server_health()
+        via recovery_service.recover_error_planets().
     """
     from django.utils import timezone
     from .redis_queue import add_planet_to_queue
     
     recovered_ids: List[str] = []
     
-    # --- Recover queued planets missing from Redis ---
+    # Recover queued planets missing from Redis
     missed_planets = Planet.objects.filter(
         status='queued',
         next_round_time__lte=timezone.now()
@@ -223,31 +226,6 @@ def _recover_missed_planets() -> List[str]:
             recovered_ids.append(planet_obj.planet_id)
         
         logger.info(f"Recovered {len(recovered_ids)} planets from DB fallback")
-    
-    # --- Auto-recover error planets ---
-    # Planets in 'error' status have exceeded max retries (5) but we now
-    # automatically reset them and re-queue for continuous processing.
-    error_planets = Planet.objects.filter(status='error')[:20]
-    
-    if error_planets.exists():
-        logger.warning(
-            f"Found {error_planets.count()} planets in ERROR state. "
-            f"Auto-recovering..."
-        )
-        
-        for planet_obj in error_planets:
-            # Reset to queued state
-            planet_obj.status = 'queued'
-            planet_obj.error_retry_count = 0
-            planet_obj.processing_server = None
-            planet_obj.next_round_time = timezone.now()
-            planet_obj.save()
-            
-            # Add to Redis queue for immediate processing
-            add_planet_to_queue(planet_obj.planet_id, planet_obj.next_round_time)
-            recovered_ids.append(planet_obj.planet_id)
-            
-            logger.info(f"Auto-recovered error planet {planet_obj.planet_id}")
     
     return recovered_ids
 
