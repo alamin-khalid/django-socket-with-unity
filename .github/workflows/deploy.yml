@@ -1,9 +1,9 @@
-name: Deploy Django (Production)
+name: Deploy to Production
 
 on:
   push:
     branches:
-      - main
+      - release
 
 jobs:
   deploy:
@@ -19,13 +19,16 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          port: 6699
+          port: ${{ secrets.SERVER_PORT }}
           script: |
             set -e
 
             cd /home/khalid/apps/app
 
-            git pull origin main
+            # Force clean checkout (overwrite local changes)
+            git fetch origin
+            git checkout release
+            git reset --hard origin/release
 
             source venv/bin/activate
 
@@ -34,8 +37,13 @@ jobs:
             python manage.py migrate --noinput
             python manage.py collectstatic --noinput
 
-            # Restart all required services
+            # Restart Daphne
             sudo systemctl restart daphne
+
+            # Restart Celery services
             sudo systemctl restart celery-worker
             sudo systemctl restart celery-beat
+
+            echo "✅ Deployed from release branch"
+
 
