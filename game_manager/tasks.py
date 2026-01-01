@@ -23,7 +23,7 @@ Task Flow
 Key Design Decisions
 --------------------
 - Single TaskHistory record per job attempt (retries update existing record)
-- Immediate retry on failure (no backoff delay) with max 5 retry limit
+- Exponential backoff retry on failure (1, 2, 4, 8, 16 seconds) with max 5 retry limit
 - Server state transitions: offline -> idle -> busy -> idle (on completion)
 - Planet state transitions: queued -> processing -> queued (on completion)
 
@@ -440,7 +440,7 @@ def handle_job_error(planet_id: str, server_id: str, error_message: str) -> Unio
     Handle job failure reported by Unity server.
     
     Implements a retry strategy with the following characteristics:
-    - Immediate retry (no backoff delay) - get back in queue ASAP
+    - Exponential backoff delay (1, 2, 4, 8, 16 seconds between retries)
     - Maximum 5 retry attempts - prevent infinite loops
     - Single TaskHistory record per job (reused across retries)
     
@@ -454,9 +454,9 @@ def handle_job_error(planet_id: str, server_id: str, error_message: str) -> Unio
         bool: False on exception
     
     Retry Strategy:
-        The system uses immediate retry because:
+        The system uses exponential backoff because:
         1. Errors are often transient (server busy, temporary resource issue)
-        2. With single TaskHistory record, no database bloat from retries
+        2. Increasing delays give the system time to recover
         3. Max retry limit prevents infinite loops for persistent errors
     
     After MAX_RETRIES:
@@ -522,17 +522,19 @@ def handle_job_error(planet_id: str, server_id: str, error_message: str) -> Unio
             
             return f"Planet {planet_id} auto-reset after max retries, requeued with {COOLDOWN_SECONDS}s cooldown"
         
-        # --- Immediate Retry ---
+        # --- Exponential Backoff Retry ---
+        # Delay sequence: 1s, 2s, 4s, 8s, 16s (2^(retry_count-1) seconds)
+        backoff_delay = 2 ** (retry_count - 1)  # 1, 2, 4, 8, 16 seconds
         planet_obj.status = 'queued'
         planet_obj.processing_server = None
-        planet_obj.next_round_time = timezone.now()  # Immediate retry
+        planet_obj.next_round_time = timezone.now() + timedelta(seconds=backoff_delay)
         planet_obj.save()
         
         # Add back to Redis queue
         add_planet_to_queue(planet_obj.planet_id, planet_obj.next_round_time)
         
-        logger.info(f"Job error handled for {planet_id} - retry {retry_count} queued immediately")
-        return f"Planet {planet_id} retry {retry_count} queued"
+        logger.info(f"Job error handled for {planet_id} - retry {retry_count} queued with {backoff_delay}s delay")
+        return f"Planet {planet_id} retry {retry_count} queued (delay: {backoff_delay}s)"
         
     except Exception as e:
         logger.error(f"Error handling job error: {e}")
