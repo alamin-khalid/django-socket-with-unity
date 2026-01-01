@@ -242,7 +242,8 @@ def handle_job_completion(
         
         # Ensure timezone awareness
         if next_round_time.tzinfo is None:
-            next_round_time = next_round_time.replace(tzinfo=timezone.utc)
+            from datetime import timezone as dt_timezone
+            next_round_time = next_round_time.replace(tzinfo=dt_timezone.utc)
         
         # --- Defensive: Handle past times ---
         # If the received next_round_time is in the past (e.g., API returned
