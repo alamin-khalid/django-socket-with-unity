@@ -1,9 +1,8 @@
-name: Deploy Django (Production)
+name: Deploy to Production
 
 on:
-  push:
-    branches:
-      - release
+  release:
+    types: [published]
 
 jobs:
   deploy:
@@ -19,13 +18,15 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          port: 6699
+          port: ${{ secrets.SERVER_PORT }}
           script: |
             set -e
 
             cd /home/khalid/apps/app
 
-            git pull origin release
+            # Fetch and checkout the release tag
+            git fetch --all --tags
+            git checkout ${{ github.event.release.tag_name }}
 
             source venv/bin/activate
 
@@ -34,8 +35,14 @@ jobs:
             python manage.py migrate --noinput
             python manage.py collectstatic --noinput
 
-            # Restart all required services
+            # Restart Daphne
             sudo systemctl restart daphne
-            sudo systemctl restart celery-worker
-            sudo systemctl restart celery-beat
 
+            # Restart Celery (screen-based, not systemd)
+            pkill -f "celery -A server_orchestrator" || true
+            sleep 2
+            
+            screen -dmS celery-worker bash -c "cd /home/khalid/apps/app && source venv/bin/activate && celery -A server_orchestrator worker --loglevel=info"
+            screen -dmS celery-beat bash -c "cd /home/khalid/apps/app && source venv/bin/activate && celery -A server_orchestrator beat --loglevel=info"
+
+            echo "✅ Deployed: ${{ github.event.release.tag_name }}"

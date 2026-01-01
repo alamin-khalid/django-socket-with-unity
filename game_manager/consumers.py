@@ -216,15 +216,15 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
             await self._handle_status_update_with_assignment(content)
             
         elif message_type == 'job_done':
-            await self.handle_job_done(content)
+            self.handle_job_done(content)
             # Server is now idle - check for more work
             await self.trigger_assignment()
             
         elif message_type == 'error':
-            await self.handle_error(content)
+            self.handle_error(content)
             
         elif message_type == 'disconnect':
-            await self.handle_disconnect(content)
+            self.handle_disconnect(content)
             
         else:
             logger.warning(f"[WebSocket] Unknown message type: {message_type}")
@@ -306,7 +306,6 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         if data.get('status') == 'idle':
             await self.trigger_assignment()
 
-    @database_sync_to_async
     def handle_job_done(self, data: Dict[str, Any]) -> None:
         """
         Process job completion notification from Unity.
@@ -352,7 +351,6 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         except Exception as e:
             logger.error(f"[Job Done] Error processing: {e}")
 
-    @database_sync_to_async
     def handle_error(self, data: Dict[str, Any]) -> None:
         """
         Process error report from Unity.
@@ -374,7 +372,6 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         if planet_id:
             handle_job_error.delay(str(planet_id), self.server_id, error_message)
 
-    @database_sync_to_async
     def handle_disconnect(self, data: Dict[str, Any]) -> None:
         """
         Handle graceful disconnect notification from Unity.

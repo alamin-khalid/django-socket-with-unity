@@ -1,5 +1,4 @@
 using UnityEngine;
-using WebSocketSharp;
 using Newtonsoft.Json.Linq;
 using System.Collections;
 using UnityEngine.Networking;
@@ -9,13 +8,13 @@ using System.Threading.Tasks;
 [RequireComponent(typeof(PerformanceTracker))]
 public class UnityWebSocketClient : MonoBehaviour
 {
-    private string backendWsUrl = "ws://103.12.214.244/ws/server/";
+    private string backendWsUrl = "ws://103.12.214.243/ws/server/";
     // private string backendWsUrl = "ws://127.0.0.1:8000/ws/server/";
 
 
     [Header("Server Identity")] public string serverId;
 
-    private WebSocket ws;
+    private NativeWebSocketWrapper ws;
     private string publicIP = "";
 
     private float heartbeatTime = 5f;
@@ -62,7 +61,7 @@ public class UnityWebSocketClient : MonoBehaviour
         yield return StartCoroutine(GetPublicIP());
         serverId = $"unity_{publicIP.Replace(".", "_")}";
 
-        Connect();
+        ConnectAsync();
         StartCoroutine(SendHeartbeat());
 
         // Wait for connection
@@ -133,58 +132,86 @@ public class UnityWebSocketClient : MonoBehaviour
     // WEBSOCKET
     // ===============================
 
-    private void Connect()
+    private async void ConnectAsync()
     {
         string wsUrl = $"{backendWsUrl}{serverId}/";
-
-        ws = new WebSocket(wsUrl);
+        
         Debug.Log($"[WebSocket] 🔌 Connecting → {wsUrl}");
 
-        ws.OnOpen += (s, e) =>
+        // Dispose previous connection if exists
+        ws?.Dispose();
+        
+        ws = new NativeWebSocketWrapper();
+        
+        ws.OnOpen += () =>
         {
-            IsInitialized = true;
-            reconnectAttempt = 0;
-            lastDisconnectReason = DisconnectReason.None;
-
-            Debug.Log($"[WebSocket] ✅ Connected as {serverId}");
-
-            // On reconnect, immediately send idle status to let Django know we're ready
-            if (isReconnecting)
+            MainThreadDispatcher.Enqueue(() =>
             {
-                MainThreadDispatcher.Enqueue(() =>
+                IsInitialized = true;
+                reconnectAttempt = 0;
+                lastDisconnectReason = DisconnectReason.None;
+
+                Debug.Log($"[WebSocket] ✅ Connected as {serverId}");
+
+                // On reconnect, immediately send idle status to let Django know we're ready
+                if (isReconnecting)
                 {
                     SendStatusUpdate("idle");
                     Debug.Log("[WebSocket] ✅ Reconnected and marked as idle");
-                });
-                isReconnecting = false;
-            }
+                    isReconnecting = false;
+                }
+            });
         };
 
-        ws.OnMessage += (s, e) => { MainThreadDispatcher.Enqueue(() => { HandleMessage(e.Data); }); };
-
-        ws.OnError += (s, e) => { Debug.LogError($"[WebSocket] ❌ Error: {e.Message}"); };
-
-        ws.OnClose += (s, e) =>
+        ws.OnMessage += (message) =>
         {
-            IsInitialized = false;
-
-            lastDisconnectReason = e.Code switch
-            {
-                1000 => DisconnectReason.ManualQuit,
-                1001 => DisconnectReason.ServerClosed,
-                1006 => DisconnectReason.NetworkError,
-                _ => DisconnectReason.Unknown
-            };
-
-            Debug.LogWarning(
-                $"[WebSocket] ❌ Disconnected | Code={e.Code}, Reason={e.Reason}, Type={lastDisconnectReason}"
-            );
-
-            if (!isQuitting)
-                ScheduleReconnect();
+            MainThreadDispatcher.Enqueue(() => { HandleMessage(message); });
         };
 
-        ws.Connect();
+        ws.OnError += (error) =>
+        {
+            MainThreadDispatcher.Enqueue(() =>
+            {
+                Debug.LogError($"[WebSocket] ❌ Error: {error}");
+            });
+        };
+
+        ws.OnClose += (code, reason) =>
+        {
+            MainThreadDispatcher.Enqueue(() =>
+            {
+                IsInitialized = false;
+
+                lastDisconnectReason = code switch
+                {
+                    1000 => DisconnectReason.ManualQuit,
+                    1001 => DisconnectReason.ServerClosed,
+                    1006 => DisconnectReason.NetworkError,
+                    _ => DisconnectReason.Unknown
+                };
+
+                Debug.LogWarning(
+                    $"[WebSocket] ❌ Disconnected | Code={code}, Reason={reason}, Type={lastDisconnectReason}"
+                );
+
+                if (!isQuitting)
+                    ScheduleReconnect();
+            });
+        };
+
+        try
+        {
+            await ws.ConnectAsync(wsUrl);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"[WebSocket] ❌ Connection failed: {ex.Message}");
+            MainThreadDispatcher.Enqueue(() =>
+            {
+                if (!isQuitting)
+                    ScheduleReconnect();
+            });
+        }
     }
 
     // ===============================
@@ -211,10 +238,11 @@ public class UnityWebSocketClient : MonoBehaviour
 
         Debug.Log("[WebSocket] 🔁 Reconnecting...");
         isReconnecting = true; // Mark as reconnection attempt
+        
         try
         {
-            ws?.Close();
-            Connect();
+            ws?.Dispose();
+            ConnectAsync();
         }
         catch (Exception ex)
         {
@@ -318,7 +346,7 @@ public class UnityWebSocketClient : MonoBehaviour
         {
             yield return heartbeatWait;
 
-            if (ws != null && ws.IsAlive)
+            if (ws != null && ws.IsConnected)
             {
                 try
                 {
@@ -332,7 +360,7 @@ public class UnityWebSocketClient : MonoBehaviour
                         ["disk"] = performanceTracker.currentDisk
                     };
 
-                    ws.Send(msg.ToString());
+                    _ = ws.SendAsync(msg.ToString());
                 }
                 catch (Exception ex)
                 {
@@ -348,9 +376,9 @@ public class UnityWebSocketClient : MonoBehaviour
 
     public void SendStatusUpdate(string status)
     {
-        if (ws == null || !ws.IsAlive) return;
+        if (ws == null || !ws.IsConnected) return;
 
-        ws.Send(new JObject
+        _ = ws.SendAsync(new JObject
         {
             ["type"] = "status_update",
             ["status"] = status
@@ -359,9 +387,9 @@ public class UnityWebSocketClient : MonoBehaviour
 
     public void SendJobDone(JobDoneInfo info)
     {
-        if (ws == null || !ws.IsAlive) return;
+        if (ws == null || !ws.IsConnected) return;
 
-        ws.Send(new JObject
+        _ = ws.SendAsync(new JObject
         {
             ["type"] = "job_done",
             ["planet_id"] = info.planetId.ToString(),
@@ -379,9 +407,9 @@ public class UnityWebSocketClient : MonoBehaviour
 
     public void SendFailed(int planetId, string cause)
     {
-        if (ws == null || !ws.IsAlive) return;
+        if (ws == null || !ws.IsConnected) return;
 
-        ws.Send(new JObject
+        _ = ws.SendAsync(new JObject
         {
             ["type"] = "error",
             ["planet_id"] = planetId.ToString(),
@@ -398,29 +426,34 @@ public class UnityWebSocketClient : MonoBehaviour
 
     private void SendDisconnect()
     {
-        if (ws == null || !ws.IsAlive) return;
+        if (ws == null || !ws.IsConnected) return;
 
         Debug.Log("[WebSocket] 📤 Sending graceful disconnect");
 
-        ws.Send(new JObject
+        _ = ws.SendAsync(new JObject
         {
             ["type"] = "disconnect",
             ["server_id"] = serverId
         }.ToString());
     }
 
-    private void OnApplicationQuit()
+    private async void OnApplicationQuit()
     {
         isQuitting = true;
         lastDisconnectReason = DisconnectReason.ManualQuit;
         SendDisconnect();
-        ws?.Close();
+        
+        if (ws != null)
+        {
+            await ws.CloseAsync();
+            ws.Dispose();
+        }
     }
 
     private void OnDestroy()
     {
         isQuitting = true;
-        ws?.Close();
+        ws?.Dispose();
     }
 }
 

@@ -108,9 +108,11 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
 
 # Task execution mode:
-# - True (default for dev): Tasks run synchronously, no worker needed
-# - False (production): Tasks run async via Celery worker
-CELERY_TASK_ALWAYS_EAGER = os.environ.get('CELERY_EAGER', 'True') == 'True'
+# - True (dev only): Tasks run synchronously, no worker needed
+# - False (production/default): Tasks run async via Celery worker
+# IMPORTANT: Eager mode does NOT work with Daphne because Daphne is async
+#            and Celery tasks do synchronous database operations.
+CELERY_TASK_ALWAYS_EAGER = os.environ.get('CELERY_EAGER', 'False') == 'True'
 
 CELERY_BEAT_SCHEDULE = {
     'process-due-planets': {
