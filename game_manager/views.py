@@ -518,20 +518,24 @@ class TaskHistoryView(View):
         - Client-side search/filter
         - Pagination
         - Sorting by any column
+        
+        Note: Server IPs are masked in the backend before sending to client
+        for security - the raw IP is never exposed to the browser.
         """
         import json
+        from .templatetags.dashboard_filters import mask_server_ip
         
         # Fetch all tasks with related data
         tasks = TaskHistory.objects.select_related(
             'planet', 'server'
         ).order_by('-start_time')
         
-        # Convert to JSON-serializable format
+        # Convert to JSON-serializable format with masked server IDs
         tasks_data = []
         for task in tasks:
             tasks_data.append({
                 'planet_id': task.planet.planet_id if task.planet else 'Unknown',
-                'server_id': task.server.server_id if task.server else None,
+                'server_id': mask_server_ip(task.server.server_id) if task.server else None,
                 'status': task.status,
                 'start_time': task.start_time.isoformat() if task.start_time else None,
                 'end_time': task.end_time.isoformat() if task.end_time else None,

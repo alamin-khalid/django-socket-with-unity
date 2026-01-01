@@ -3,6 +3,7 @@
 
 <head>
     {% load static %}
+    {% load dashboard_filters %}
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Game Server Dashboard</title>
@@ -81,7 +82,7 @@
                     <tbody>
                         {% for server in servers %}
                         <tr>
-                            <td><strong>{{ server.server_id }}</strong></td>
+                            <td><strong>{{ server.server_id|mask_ip }}</strong></td>
                             <td><span class="badge {{ server.status }}">{{ server.status }}</span></td>
                             <td class="timestamp">
                                 {% if server.last_heartbeat %}
@@ -161,7 +162,7 @@
                             <td>{{ planet.current_round_number }}</td>
                             <td>
                                 {% if planet.processing_server %}
-                                {{ planet.processing_server.server_id }}
+                                {{ planet.processing_server.server_id|mask_ip }}
                                 {% else %}
                                 <span class="text-muted">-</span>
                                 {% endif %}
@@ -202,7 +203,7 @@
                             <td><strong>{{ task.planet.planet_id }}</strong></td>
                             <td>
                                 {% if task.server %}
-                                {{ task.server.server_id }}
+                                {{ task.server.server_id|mask_ip }}
                                 {% else %}
                                 <span class="text-muted">Unknown</span>
                                 {% endif %}
