@@ -1,0 +1,16 @@
+[Unit]
+Description=Celery Worker for Django Server Orchestrator
+After=network.target redis-server.service
+
+[Service]
+Type=simple
+User=khalid
+Group=khalid
+WorkingDirectory=/home/khalid/apps/app
+Environment="PATH=/home/khalid/apps/app/venv/bin"
+ExecStart=/home/khalid/apps/app/venv/bin/celery -A server_orchestrator worker --loglevel=info
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

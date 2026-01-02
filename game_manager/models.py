@@ -32,7 +32,7 @@ Planet Status Flow:
                        ↓
                     error (max retries exceeded)
 
-Author: Krada Games
+Author: AL AMIN KHALID
 Last Modified: 2024-12
 """
 

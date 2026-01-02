@@ -25,7 +25,16 @@ The function is registered in apps.py ready() hook:
 
 Important: Only runs once per Django process start, not on every request.
 
-Author: Krada Games
+Recovery Logic
+--------------
+    1. Find all servers NOT marked offline (they're stale)
+    2. If server had current_task, that job is orphaned:
+       - Reset planet to 'queued' status
+       - Re-add to Redis queue for reassignment
+       - Mark TaskHistory as 'timeout'
+    3. Mark server offline
+
+Author: AL AMIN KHALID
 Last Modified: 2024-12
 """
 

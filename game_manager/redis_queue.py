@@ -44,7 +44,7 @@ Settings are read from Django settings with fallbacks:
 - REDIS_PORT: Default 6379
 - REDIS_DB: Default 0
 
-Author: Krada Games
+Author: AL AMIN KHALID
 Last Modified: 2024-12
 """
 
