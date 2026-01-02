@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Logs - Game Server Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #f5f7fa;
+            --bg-card: white;
+            --text-primary: #2c3e50;
+            --text-secondary: #7f8c8d;
+            --text-muted: #95a5a6;
+            --border-color: #ecf0f1;
+            --th-bg: #f8f9fa;
+            --shadow: rgba(0, 0, 0, 0.1);
+            --accent: #9b59b6;
+            --log-bg: #1a1a2e;
+        }
+
+        body.dark-mode {
+            --bg-primary: #1a1a2e;
+            --bg-card: #16213e;
+            --text-primary: #e8e8e8;
+            --text-secondary: #a0a0a0;
+            --text-muted: #6c6c6c;
+            --border-color: #2a2a4a;
+            --th-bg: #1f1f3a;
+            --shadow: rgba(0, 0, 0, 0.3);
+            --log-bg: #0d0d1a;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: var(--bg-primary);
+            padding: 20px;
+            transition: background 0.3s ease, color 0.3s ease;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        h1 {
+            color: var(--text-primary);
+            font-size: 28px;
+        }
+
+        .back-link {
+            color: var(--accent);
+            text-decoration: none;
+            font-size: 14px;
+            padding: 8px 16px;
+            border: 1px solid var(--accent);
+            border-radius: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .back-link:hover {
+            background: var(--accent);
+            color: white;
+        }
+
+        .theme-toggle {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            color: var(--text-primary);
+            transition: all 0.3s ease;
+        }
+
+        .theme-toggle:hover {
+            transform: scale(1.05);
+        }
+
+        /* Search and Controls */
+        .controls {
+            background: var(--bg-card);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px var(--shadow);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .search-box {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 1;
+            min-width: 250px;
+        }
+
+        .search-input {
+            flex: 1;
+            padding: 10px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 14px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            outline: none;
+            transition: border-color 0.3s ease;
+        }
+
+        .search-input:focus {
+            border-color: var(--accent);
+        }
+
+        .search-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .page-size-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .page-size-control label {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .page-size-select {
+            padding: 8px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        /* Stats bar */
+        .stats-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        /* Log Section */
+        .section {
+            background: var(--bg-card);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px var(--shadow);
+            transition: background 0.3s ease;
+        }
+
+        .log-container {
+            background: var(--log-bg);
+            border-radius: 8px;
+            padding: 15px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        .log-entry {
+            padding: 6px 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+        }
+
+        .log-entry:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .log-time {
+            color: #888;
+            white-space: nowrap;
+            min-width: 150px;
+        }
+
+        .log-level {
+            font-weight: bold;
+            min-width: 70px;
+            text-align: center;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .log-level-debug {
+            color: #95a5a6;
+            background: rgba(149, 165, 166, 0.1);
+        }
+
+        .log-level-info {
+            color: #3498db;
+            background: rgba(52, 152, 219, 0.1);
+        }
+
+        .log-level-warning {
+            color: #f39c12;
+            background: rgba(243, 156, 18, 0.1);
+        }
+
+        .log-level-error {
+            color: #e74c3c;
+            background: rgba(231, 76, 60, 0.1);
+        }
+
+        .log-level-critical {
+            color: #e74c3c;
+            background: rgba(231, 76, 60, 0.2);
+        }
+
+        .log-logger {
+            color: #9b59b6;
+            min-width: 180px;
+        }
+
+        .log-message {
+            color: #ecf0f1;
+            flex: 1;
+            word-break: break-word;
+        }
+
+        .text-muted {
+            color: var(--text-muted);
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 30px;
+            color: var(--text-muted);
+        }
+
+        /* Highlight search matches */
+        .highlight {
+            background-color: #fff3cd;
+            padding: 1px 3px;
+            border-radius: 3px;
+            color: #000;
+        }
+
+        body.dark-mode .highlight {
+            background-color: #856404;
+            color: white;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-left">
+                <h1>📋 System Logs</h1>
+                <a href="/dashboard/" class="back-link">← Back to Dashboard</a>
+            </div>
+            <button class="theme-toggle" onclick="toggleTheme()">🌙 Night Mode</button>
+        </div>
+
+        <div class="controls">
+            <div class="search-box">
+                <span>🔍</span>
+                <input type="text" class="search-input" id="searchInput" placeholder="Search logs...">
+            </div>
+            <div class="page-size-control">
+                <label>Level:</label>
+                <select class="page-size-select" id="levelFilter">
+                    <option value="ALL">All Levels</option>
+                    <option value="DEBUG">DEBUG</option>
+                    <option value="INFO">INFO</option>
+                    <option value="WARNING">WARNING</option>
+                    <option value="ERROR">ERROR</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="stats-bar">
+            <span id="resultStats">Showing 0 logs</span>
+            <span id="filterInfo"></span>
+        </div>
+
+        <div class="section">
+            <div class="log-container" id="logContainer">
+                {% for log in system_logs %}
+                <div class="log-entry" data-level="{{ log.level }}">
+                    <span class="log-time">{{ log.timestamp }}</span>
+                    <span class="log-level log-level-{{ log.level|lower }}">{{ log.level }}</span>
+                    <span class="log-logger">[{{ log.logger }}]</span>
+                    <span class="log-message">{{ log.message }}</span>
+                </div>
+                {% empty %}
+                <div class="no-data">No logs available yet. Logs will appear here as the system processes jobs.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // All logs data
+        const allLogs = document.querySelectorAll('.log-entry');
+        const totalLogs = allLogs.length;
+        let visibleCount = totalLogs;
+
+        // DOM elements
+        const searchInput = document.getElementById('searchInput');
+        const levelFilter = document.getElementById('levelFilter');
+        const resultStats = document.getElementById('resultStats');
+        const filterInfo = document.getElementById('filterInfo');
+
+        // Theme toggle
+        function toggleTheme() {
+            document.body.classList.toggle('dark-mode');
+            const isDark = document.body.classList.contains('dark-mode');
+            localStorage.setItem('darkMode', isDark);
+            document.querySelector('.theme-toggle').textContent = isDark ? '☀️ Day Mode' : '🌙 Night Mode';
+        }
+
+        function initTheme() {
+            const savedTheme = localStorage.getItem('darkMode');
+            const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const isDark = savedTheme !== null ? savedTheme === 'true' : systemDark;
+
+            if (isDark) {
+                document.body.classList.add('dark-mode');
+                document.querySelector('.theme-toggle').textContent = '☀️ Day Mode';
+            }
+        }
+        initTheme();
+
+        // Filter logs
+        function filterLogs() {
+            const searchQuery = searchInput.value.toLowerCase().trim();
+            const levelValue = levelFilter.value;
+            visibleCount = 0;
+
+            allLogs.forEach(entry => {
+                const level = entry.dataset.level;
+                const text = entry.textContent.toLowerCase();
+
+                const matchesLevel = levelValue === 'ALL' || level === levelValue;
+                const matchesSearch = !searchQuery || text.includes(searchQuery);
+
+                if (matchesLevel && matchesSearch) {
+                    entry.style.display = 'flex';
+                    visibleCount++;
+
+                    // Highlight search matches
+                    if (searchQuery) {
+                        highlightText(entry.querySelector('.log-message'), searchQuery);
+                    } else {
+                        removeHighlight(entry.querySelector('.log-message'));
+                    }
+                } else {
+                    entry.style.display = 'none';
+                }
+            });
+
+            updateStats();
+        }
+
+        function highlightText(element, query) {
+            if (!element) return;
+            const originalText = element.dataset.originalText || element.textContent;
+            element.dataset.originalText = originalText;
+
+            const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+            element.innerHTML = originalText.replace(regex, '<span class="highlight">$1</span>');
+        }
+
+        function removeHighlight(element) {
+            if (!element) return;
+            if (element.dataset.originalText) {
+                element.textContent = element.dataset.originalText;
+            }
+        }
+
+        function updateStats() {
+            if (visibleCount === totalLogs) {
+                resultStats.textContent = `Showing all ${totalLogs} logs`;
+                filterInfo.textContent = '';
+            } else {
+                resultStats.textContent = `Showing ${visibleCount} of ${totalLogs} logs`;
+                filterInfo.textContent = '(filtered)';
+            }
+        }
+
+        // Debounce for search
+        function debounce(func, wait) {
+            let timeout;
+            return function (...args) {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func(...args), wait);
+            };
+        }
+
+        // Event listeners
+        searchInput.addEventListener('input', debounce(filterLogs, 200));
+        levelFilter.addEventListener('change', filterLogs);
+
+        // Initialize
+        updateStats();
+    </script>
+</body>
+
+</html>

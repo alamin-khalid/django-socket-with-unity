@@ -185,9 +185,19 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
+    "formatters": {
+        "simple": {
+            "format": "%(message)s",
+        },
+    },
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
+        },
+        "redis_buffer": {
+            "class": "game_manager.log_handler.RedisLogHandler",
+            "level": "DEBUG",
+            "formatter": "simple",
         },
     },
     "root": {
@@ -211,7 +221,7 @@ LOGGING = {
             "propagate": False,
         },
         "game_manager": {
-            "handlers": ["console"],
+            "handlers": ["console", "redis_buffer"],
             "level": "DEBUG",
             "propagate": False,
         },

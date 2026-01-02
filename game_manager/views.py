@@ -425,6 +425,7 @@ class DashboardView(View):
         - All servers (ordered by server_id)
         - Active planets (non-completed, next 20)
         - Recent tasks (last 50)
+        - System logs (last 100 from Redis)
         - Aggregate statistics
         
         Performance Note:
@@ -432,6 +433,7 @@ class DashboardView(View):
             database queries when accessing planet and server data.
         """
         from django.db.models import Avg
+        from .log_handler import get_recent_logs
         
         # --- Fetch Core Data ---
         servers = UnityServer.objects.all().order_by('server_id')
@@ -443,6 +445,9 @@ class DashboardView(View):
         recent_tasks = TaskHistory.objects.select_related(
             'planet', 'server'
         ).order_by('-start_time')[:50]
+        
+        # --- System Logs from Redis ---
+        system_logs = get_recent_logs(limit=100)
         
         # --- Aggregate Statistics ---
         total_tasks = TaskHistory.objects.count()
@@ -487,6 +492,9 @@ class DashboardView(View):
             'offline_servers': offline_servers,
             'not_init_servers': not_init_servers,
             'total_servers': servers.count(),
+            
+            # System logs
+            'system_logs': system_logs,
             
             # Timestamp
             'server_time': timezone.now(),
@@ -549,6 +557,37 @@ class TaskHistoryView(View):
         }
         
         return render(request, 'game_manager/task_history.html', context)
+
+
+class SystemLogsView(View):
+    """
+    Full system logs view with filtering capabilities.
+    
+    Shows all 1000 logs from Redis buffer (vs. 100 on dashboard).
+    Provides search and level filtering via client-side JavaScript.
+    
+    Template: game_manager/system_logs.html
+    URL: /system-logs/
+    """
+    
+    def get(self, request) -> render:
+        """
+        Render system logs page with all buffered logs.
+        
+        Fetches up to 1000 logs from Redis circular buffer.
+        Unlike dashboard which shows 100, this page shows all available.
+        """
+        from .log_handler import get_recent_logs
+        
+        system_logs = get_recent_logs(limit=1000)
+        
+        context = {
+            'system_logs': system_logs,
+            'server_time': timezone.now(),
+        }
+        
+        return render(request, 'game_manager/system_logs.html', context)
+
 
 
 # =============================================================================
