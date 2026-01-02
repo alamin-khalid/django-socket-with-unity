@@ -85,7 +85,7 @@ class RedisLogHandler(logging.Handler):
         Fails silently if Redis is unavailable to avoid
         disrupting the main application.
         """
-        try:
+        try:           
             client = self._ensure_connection()
             if not client:
                 return

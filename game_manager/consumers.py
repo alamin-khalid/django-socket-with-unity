@@ -201,7 +201,9 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         """
         message_type = content.get('type', 'unknown')
         
-        logger.debug(f"[WebSocket] ⬇ Received from {self.server_id}: {message_type}")
+        # Skip logging heartbeat messages - too frequent
+        if message_type != 'heartbeat':
+            logger.debug(f"[WebSocket] ⬇ Received from {self.server_id}: {message_type}")
         
         # Route to appropriate handler
         if message_type == 'heartbeat':
@@ -217,8 +219,9 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
             
         elif message_type == 'job_done':
             await self.handle_job_done(content)
-            # Server is now idle - check for more work
-            await self.trigger_assignment()
+            # NOTE: Don't trigger assignment here!
+            # Unity sends status_update:idle afterward which triggers it.
+            # Calling here + there causes duplicate assignments.
             
         elif message_type == 'error':
             await self.handle_error(content)
