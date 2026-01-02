@@ -32,7 +32,7 @@ Currently, these endpoints are unauthenticated. For production:
 - Protect dashboard with @login_required
 - Consider IP whitelisting for Unity servers
 
-Author: Krada Games
+Author: AL AMIN KHALID
 Last Modified: 2024-12
 """
 

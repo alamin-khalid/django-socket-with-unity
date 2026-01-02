@@ -58,7 +58,7 @@ The critical section between "find idle server" and "assign job" is protected:
     │  ... other calls see server as busy, skip it ...           │
     └────────────────────────────────────────────────────────────┘
 
-Author: Krada Games
+Author: AL AMIN KHALID
 Last Modified: 2024-12
 """
 

@@ -46,7 +46,7 @@ Unlike pure polling, this consumer triggers job assignment immediately when:
 
 This provides lower latency than waiting for the next scheduler tick.
 
-Author: Krada Games
+Author: AL AMIN KHALID
 Last Modified: 2024-12
 """
 

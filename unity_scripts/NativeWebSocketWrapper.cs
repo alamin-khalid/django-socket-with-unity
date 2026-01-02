@@ -56,6 +56,7 @@ public class NativeWebSocketWrapper : IDisposable
     {
         var buffer = new byte[_receiveBufferSize];
         var messageBuffer = new StringBuilder();
+        bool closeCalled = false;
         
         try
         {
@@ -78,6 +79,7 @@ public class NativeWebSocketWrapper : IDisposable
                     await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Server closed", CancellationToken.None);
                     OnClose?.Invoke((ushort)(result.CloseStatus ?? WebSocketCloseStatus.NormalClosure), 
                                    result.CloseStatusDescription ?? "Connection closed");
+                    closeCalled = true;
                     break;
                 }
                 
@@ -99,11 +101,23 @@ public class NativeWebSocketWrapper : IDisposable
             Debug.LogError($"[NativeWebSocket] WebSocket error: {ex.Message}");
             OnError?.Invoke(ex.Message);
             OnClose?.Invoke(1006, ex.Message);
+            closeCalled = true;
         }
         catch (Exception ex)
         {
             Debug.LogError($"[NativeWebSocket] Receive error: {ex.Message}");
             OnError?.Invoke(ex.Message);
+            OnClose?.Invoke(1006, $"Receive loop error: {ex.Message}");
+            closeCalled = true;
+        }
+        finally
+        {
+            // Ensure OnClose is always called to trigger reconnection
+            if (!closeCalled && !_cts.Token.IsCancellationRequested)
+            {
+                Debug.LogWarning("[NativeWebSocket] Receive loop exited without close event, triggering reconnect");
+                OnClose?.Invoke(1006, "Connection lost unexpectedly");
+            }
         }
     }
     

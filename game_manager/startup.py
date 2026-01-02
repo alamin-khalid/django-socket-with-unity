@@ -34,7 +34,7 @@ Recovery Logic
        - Mark TaskHistory as 'timeout'
     3. Mark server offline
 
-Author: Krada Games
+Author: AL AMIN KHALID
 Last Modified: 2024-12
 """
 

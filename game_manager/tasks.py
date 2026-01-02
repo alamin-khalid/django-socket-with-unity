@@ -27,7 +27,7 @@ Key Design Decisions
 - Server state transitions: offline -> idle -> busy -> idle (on completion)
 - Planet state transitions: queued -> processing -> queued (on completion)
 
-Author: Krada Games
+Author: AL AMIN KHALID
 Last Modified: 2024-12
 """
 
