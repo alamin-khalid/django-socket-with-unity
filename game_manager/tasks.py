@@ -460,11 +460,15 @@ def handle_job_error(planet_id: str, server_id: str, error_message: str) -> Unio
         # --- Free Server ---
         server.status = 'idle'
         server.current_task = None
-        server.total_failed_planet += 1
+        # Note: total_failed_planet is only incremented when max retries are exceeded
+        # to accurately reflect permanently failed jobs, not temporary retry errors
         server.save()
         
         # --- Check Retry Limit ---
         if retry_count >= MAX_RETRIES:
+            # Increment failed count only on permanent failure
+            server.total_failed_planet += 1
+            server.save(update_fields=['total_failed_planet'])
             # Auto-reset and requeue with cooldown instead of staying in error state
             COOLDOWN_SECONDS = 30
             logger.warning(
