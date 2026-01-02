@@ -124,6 +124,7 @@ def assign_job_to_server(planet_id: str, server_id: int) -> bool:
         # idle -> busy
         server.status = 'busy'
         server.current_task = planet_obj
+        server.total_assigned_planet += 1
         server.save()
         
         # --- TaskHistory Management ---
@@ -245,17 +246,23 @@ def handle_job_completion(
             from datetime import timezone as dt_timezone
             next_round_time = next_round_time.replace(tzinfo=dt_timezone.utc)
         
-        # --- Defensive: Handle past times ---
-        # If the received next_round_time is in the past (e.g., API returned
-        # roundEndTime that already passed during calculation), adjust to
-        # current time so it's immediately picked up by the scheduler.
+        # --- Enforce Minimum Interval Between Processing ---
+        # Prevents duplicate processing when Unity returns a next_round_time
+        # that is in the past or very near future. Without this, the scheduler
+        # would immediately pick up the planet again, causing back-to-back
+        # processing of the same round.
+        MIN_PROCESSING_INTERVAL_SECONDS = 60
+        
         now = timezone.now()
-        if next_round_time <= now:
+        min_next_time = now + timedelta(seconds=MIN_PROCESSING_INTERVAL_SECONDS)
+        
+        if next_round_time < min_next_time:
             logger.warning(
-                f"next_round_time {next_round_time} is in the past, "
-                f"scheduling immediately at {now}"
+                f"next_round_time {next_round_time} is too soon "
+                f"(less than {MIN_PROCESSING_INTERVAL_SECONDS}s from now), "
+                f"adjusting to minimum interval at {min_next_time}"
             )
-            next_round_time = now
+            next_round_time = min_next_time
         
         # --- Update Planet State ---
         planet_obj.status = 'queued'

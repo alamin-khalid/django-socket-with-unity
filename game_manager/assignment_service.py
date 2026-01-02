@@ -152,6 +152,25 @@ def assign_available_planets() -> str:
             # Verify planet exists and is in queued state
             planet_obj = Planet.objects.get(planet_id=planet_id, status='queued')
             
+            # -----------------------------------------------------------
+            # DUPLICATE PREVENTION: Skip if processed too recently
+            # This is a secondary safeguard in case next_round_time was
+            # set too soon. Ensures minimum 60s between consecutive runs.
+            # -----------------------------------------------------------
+            from django.utils import timezone
+            from datetime import timedelta
+            
+            MIN_INTERVAL = timedelta(seconds=60)
+            if planet_obj.last_processed:
+                time_since_last = timezone.now() - planet_obj.last_processed
+                if time_since_last < MIN_INTERVAL:
+                    logger.info(
+                        f"Skipping planet {planet_id} - processed {time_since_last.total_seconds():.0f}s ago "
+                        f"(minimum interval: {MIN_INTERVAL.total_seconds():.0f}s)"
+                    )
+                    remove_from_queue(planet_id)
+                    continue
+            
             # Pop next idle server (least loaded)
             server = idle_servers.pop(0)
             
