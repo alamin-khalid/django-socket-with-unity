@@ -308,13 +308,23 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         and becomes idle, immediately check for more work instead of waiting
         for the next scheduler tick.
         
+        IMPORTANT: We add a delay before triggering assignment to prevent a race
+        condition. When Unity sends job_done followed by status_update:idle, the
+        Celery task (handle_job_completion) may not have finished updating the
+        planet's next_round_time yet. Without a delay, the assignment would find
+        the planet with its OLD time and immediately reassign it.
+        
         Args:
             data: Status update payload
         """
+        import asyncio
+        
         await self.handle_status_update(data)
         
-        # If server is now idle, look for work immediately
+        # If server is now idle, wait briefly then look for work
         if data.get('status') == 'idle':
+            # Wait for Celery to finish processing job_done before checking for new work
+            await asyncio.sleep(3)
             await self.trigger_assignment()
 
     @database_sync_to_async

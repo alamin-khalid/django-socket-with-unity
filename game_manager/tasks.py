@@ -246,24 +246,6 @@ def handle_job_completion(
             from datetime import timezone as dt_timezone
             next_round_time = next_round_time.replace(tzinfo=dt_timezone.utc)
         
-        # --- Enforce Minimum Interval Between Processing ---
-        # Prevents duplicate processing when Unity returns a next_round_time
-        # that is in the past or very near future. Without this, the scheduler
-        # would immediately pick up the planet again, causing back-to-back
-        # processing of the same round.
-        MIN_PROCESSING_INTERVAL_SECONDS = 60
-        
-        now = timezone.now()
-        min_next_time = now + timedelta(seconds=MIN_PROCESSING_INTERVAL_SECONDS)
-        
-        if next_round_time < min_next_time:
-            logger.warning(
-                f"next_round_time {next_round_time} is too soon "
-                f"(less than {MIN_PROCESSING_INTERVAL_SECONDS}s from now), "
-                f"adjusting to minimum interval at {min_next_time}"
-            )
-            next_round_time = min_next_time
-        
         # --- Update Planet State ---
         planet_obj.status = 'queued'
         
@@ -576,18 +558,6 @@ def handle_job_skipped(
         if next_round_time.tzinfo is None:
             from datetime import timezone as dt_timezone
             next_round_time = next_round_time.replace(tzinfo=dt_timezone.utc)
-        
-        # --- Enforce Minimum Interval ---
-        MIN_PROCESSING_INTERVAL_SECONDS = 60
-        now = timezone.now()
-        min_next_time = now + timedelta(seconds=MIN_PROCESSING_INTERVAL_SECONDS)
-        
-        if next_round_time < min_next_time:
-            logger.warning(
-                f"next_round_time {next_round_time} is too soon, "
-                f"adjusting to minimum interval at {min_next_time}"
-            )
-            next_round_time = min_next_time
         
         # --- Update Planet State (NO error counting) ---
         planet_obj.status = 'queued'
