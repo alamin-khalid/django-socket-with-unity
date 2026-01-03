@@ -528,6 +528,111 @@ def handle_job_error(planet_id: str, server_id: str, error_message: str) -> Unio
         logger.error(f"Error handling job error: {e}")
         return False
 
+# =============================================================================
+# JOB SKIPPED (Round time remaining)
+# =============================================================================
+
+@shared_task
+def handle_job_skipped(
+    planet_id: str,
+    server_id: str,
+    next_round_time_str: str,
+    reason: str = "Calculation skipped"
+) -> Union[str, bool]:
+    """
+    Handle job skip when Unity determines round time hasn't expired yet.
+    
+    This is NOT an error - it's normal behavior when a planet is assigned
+    for calculation but Unity checks and finds the round time is still in
+    the future. The planet is simply requeued for the correct time.
+    
+    Key differences from handle_job_error:
+    - Does NOT increment error_retry_count
+    - Does NOT mark TaskHistory as failed
+    - Simply requeues for the correct future time
+    
+    Args:
+        planet_id: Planet that was skipped
+        server_id: Server that skipped the job
+        next_round_time_str: When to actually process (ISO 8601 format)
+        reason: Human-readable skip reason for logging
+    
+    Returns:
+        str: Success message with requeue time
+        bool: False on any error
+    """
+    from dateutil import parser
+    
+    try:
+        planet_obj = Planet.objects.get(planet_id=planet_id)
+        server = UnityServer.objects.get(server_id=server_id)
+        
+        logger.info(f"Job skipped: {planet_id} on {server_id} - {reason}")
+        
+        # --- Parse Next Round Time ---
+        next_round_time = parser.isoparse(next_round_time_str)
+        
+        # Ensure timezone awareness
+        if next_round_time.tzinfo is None:
+            from datetime import timezone as dt_timezone
+            next_round_time = next_round_time.replace(tzinfo=dt_timezone.utc)
+        
+        # --- Enforce Minimum Interval ---
+        MIN_PROCESSING_INTERVAL_SECONDS = 60
+        now = timezone.now()
+        min_next_time = now + timedelta(seconds=MIN_PROCESSING_INTERVAL_SECONDS)
+        
+        if next_round_time < min_next_time:
+            logger.warning(
+                f"next_round_time {next_round_time} is too soon, "
+                f"adjusting to minimum interval at {min_next_time}"
+            )
+            next_round_time = min_next_time
+        
+        # --- Update Planet State (NO error counting) ---
+        planet_obj.status = 'queued'
+        planet_obj.processing_server = None
+        planet_obj.next_round_time = next_round_time
+        # NOTE: Do NOT increment error_retry_count - this is not an error!
+        planet_obj.save()
+        
+        # --- Free Server ---
+        # NOTE: Do NOT set server.status = 'idle' here!
+        # Unity will send 'status_update: idle' when ready for new work.
+        server.current_task = None
+        server.save()
+        
+        # --- Update TaskHistory to show skip (not failure) ---
+        task_history = TaskHistory.objects.filter(
+            planet=planet_obj,
+            server=server,
+            status='started'
+        ).order_by('-start_time').first()
+        
+        if task_history:
+            task_history.status = 'skipped'
+            task_history.end_time = timezone.now()
+            task_history.error_message = f"[Skipped] {reason}"
+            duration = (task_history.end_time - task_history.start_time).total_seconds()
+            task_history.duration_seconds = duration
+            task_history.save()
+        
+        # --- Requeue for Correct Time ---
+        add_planet_to_queue(planet_obj.planet_id, next_round_time)
+        
+        logger.info(f"Planet {planet_id} skipped and requeued for {next_round_time}")
+        return f"Planet {planet_id} skipped, requeued for {next_round_time}"
+        
+    except Planet.DoesNotExist:
+        logger.error(f"Planet {planet_id} not found during skip handling")
+        return False
+    except UnityServer.DoesNotExist:
+        logger.error(f"Server {server_id} not found during skip handling")
+        return False
+    except Exception as e:
+        logger.error(f"Job skip handling failed: {e}")
+        return False
+
 
 # =============================================================================
 # UTILITY TASKS

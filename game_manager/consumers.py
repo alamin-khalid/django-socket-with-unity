@@ -231,6 +231,9 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         elif message_type == 'error':
             await self.handle_error(content)
             
+        elif message_type == 'job_skipped':
+            await self.handle_job_skipped(content)
+            
         elif message_type == 'disconnect':
             await self.handle_disconnect(content)
             
@@ -381,6 +384,40 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         
         if planet_id:
             handle_job_error.delay(str(planet_id), self.server_id, error_message)
+
+    @database_sync_to_async
+    def handle_job_skipped(self, data: Dict[str, Any]) -> None:
+        """
+        Process job skip notification from Unity.
+        
+        Called when Unity receives a job but round time hasn't expired yet.
+        The planet is requeued for the correct future time without any
+        error counting or retries - this is normal expected behavior.
+        
+        Args:
+            data: Skip payload with planet_id, next_round_time, reason
+                {
+                    "type": "job_skipped",
+                    "planet_id": "79001",
+                    "next_round_time": "2025-12-12T03:00:00Z",
+                    "reason": "Round time remaining: 5.2 minutes"
+                }
+        """
+        from .tasks import handle_job_skipped
+        
+        planet_id = data.get('planet_id')
+        next_round_time = data.get('next_round_time')
+        reason = data.get('reason', 'Calculation skipped')
+        
+        logger.info(f"[Job Skipped] {self.server_id} skipped {planet_id}: {reason}")
+        
+        if planet_id and next_round_time:
+            handle_job_skipped.delay(
+                planet_id=str(planet_id),
+                server_id=self.server_id,
+                next_round_time_str=next_round_time,
+                reason=reason
+            )
 
     @database_sync_to_async
     def handle_disconnect(self, data: Dict[str, Any]) -> None:
