@@ -32,7 +32,6 @@ Last Modified: 2024-12
 """
 
 from celery import shared_task
-from celery.utils.log import get_task_logger
 from django.utils import timezone
 from datetime import timedelta, datetime
 from typing import Optional, Union
@@ -43,7 +42,6 @@ from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
 # Celery task logger - outputs to Celery worker logs
-logger = get_task_logger(__name__)
 
 
 # =============================================================================
@@ -112,7 +110,6 @@ def assign_job_to_server(planet_id: str, server_id: int) -> bool:
         planet_obj = Planet.objects.get(planet_id=planet_id)
         server = UnityServer.objects.get(id=server_id)
         
-        logger.info(f"Assigning planet {planet_id} to server {server.server_id}")
         
         # --- State Transition: Planet ---
         # queued -> processing
@@ -172,17 +169,13 @@ def assign_job_to_server(planet_id: str, server_id: int) -> bool:
             }
         )
         
-        logger.info(f"Job assigned: {planet_id} → {server.server_id}")
         return True
         
     except Planet.DoesNotExist:
-        logger.error(f"Planet {planet_id} not found")
         return False
     except UnityServer.DoesNotExist:
-        logger.error(f"Server with ID {server_id} not found")
         return False
     except Exception as e:
-        logger.error(f"Job assignment failed: {e}")
         return False
 
 
@@ -236,7 +229,6 @@ def handle_job_completion(
         planet_obj = Planet.objects.get(planet_id=planet_id)
         server = UnityServer.objects.get(server_id=server_id)
         
-        logger.info(f"Processing job completion: {planet_id} from {server_id}")
         
         # --- Parse Next Round Time ---
         next_round_time = parser.isoparse(next_round_time_str)
@@ -289,22 +281,17 @@ def handle_job_completion(
             duration = (task_history.end_time - task_history.start_time).total_seconds()
             task_history.duration_seconds = duration
             task_history.save()
-            logger.info(f"Task history updated: {duration:.2f}s")
         
         # --- Requeue for Next Round ---
         add_planet_to_queue(planet_obj.planet_id, next_round_time)
         
-        logger.info(f"Planet {planet_id} completed, round {planet_obj.round_id}, next at {next_round_time}")
         return f"Planet {planet_id} completed and requeued for {next_round_time}"
         
     except Planet.DoesNotExist:
-        logger.error(f"Planet {planet_id} not found during completion")
         return False
     except UnityServer.DoesNotExist:
-        logger.error(f"Server {server_id} not found during completion")
         return False
     except Exception as e:
-        logger.error(f"Job completion handling failed: {e}")
         return False
 
 
@@ -352,10 +339,6 @@ def check_server_health() -> str:
     recovered_jobs = 0
     
     for server in stale_servers:
-        logger.warning(
-            f"Server {server.server_id} detected as stale "
-            f"(last heartbeat: {server.last_heartbeat})"
-        )
         
         # Use centralized recovery service for orphaned jobs
         planet_id = recover_orphaned_job(server, "Server went offline during processing")
@@ -368,7 +351,6 @@ def check_server_health() -> str:
     
     if stale_servers.exists():
         count = stale_servers.count()
-        logger.warning(f"Marked {count} servers offline, recovered {recovered_jobs} jobs")
         result = f"Marked {count} servers offline, recovered {recovered_jobs} jobs"
     else:
         result = "All servers healthy"
@@ -429,10 +411,6 @@ def handle_job_error(planet_id: str, server_id: str, error_message: str) -> Unio
         planet_obj.error_retry_count += 1
         retry_count = planet_obj.error_retry_count
         
-        logger.error(
-            f"Job error: {planet_id} on {server_id} "
-            f"(retry {retry_count}/{MAX_RETRIES}): {error_message}"
-        )
         
         # --- Update TaskHistory ---
         task_history = TaskHistory.objects.filter(
@@ -464,10 +442,6 @@ def handle_job_error(planet_id: str, server_id: str, error_message: str) -> Unio
             server.save(update_fields=['total_failed_planet'])
             # Auto-reset and requeue with cooldown instead of staying in error state
             COOLDOWN_SECONDS = 30
-            logger.warning(
-                f"Planet {planet_id} exceeded max retries ({MAX_RETRIES}), "
-                f"auto-resetting and re-queueing with {COOLDOWN_SECONDS}s cooldown"
-            )
             planet_obj.status = 'queued'
             planet_obj.processing_server = None
             planet_obj.error_retry_count = 0  # Reset retry counter
@@ -488,10 +462,6 @@ def handle_job_error(planet_id: str, server_id: str, error_message: str) -> Unio
         # If so, use that instead of backoff (respect the scheduled time)
         if planet_obj.next_round_time and planet_obj.next_round_time > backoff_time:
             requeue_time = planet_obj.next_round_time
-            logger.info(
-                f"Planet {planet_id} next_round_time ({planet_obj.next_round_time}) is in future, "
-                f"using scheduled time instead of backoff"
-            )
         else:
             requeue_time = backoff_time
         
@@ -503,11 +473,9 @@ def handle_job_error(planet_id: str, server_id: str, error_message: str) -> Unio
         # Add back to Redis queue
         add_planet_to_queue(planet_obj.planet_id, planet_obj.next_round_time)
         
-        logger.info(f"Job error handled for {planet_id} - retry {retry_count} queued for {requeue_time}")
         return f"Planet {planet_id} retry {retry_count} queued (delay: {backoff_delay}s)"
         
     except Exception as e:
-        logger.error(f"Error handling job error: {e}")
         return False
 
 # =============================================================================
@@ -549,7 +517,6 @@ def handle_job_skipped(
         planet_obj = Planet.objects.get(planet_id=planet_id)
         server = UnityServer.objects.get(server_id=server_id)
         
-        logger.info(f"Job skipped: {planet_id} on {server_id} - {reason}")
         
         # --- Parse Next Round Time ---
         next_round_time = parser.isoparse(next_round_time_str)
@@ -590,17 +557,13 @@ def handle_job_skipped(
         # --- Requeue for Correct Time ---
         add_planet_to_queue(planet_obj.planet_id, next_round_time)
         
-        logger.info(f"Planet {planet_id} skipped and requeued for {next_round_time}")
         return f"Planet {planet_id} skipped, requeued for {next_round_time}"
         
     except Planet.DoesNotExist:
-        logger.error(f"Planet {planet_id} not found during skip handling")
         return False
     except UnityServer.DoesNotExist:
-        logger.error(f"Server {server_id} not found during skip handling")
         return False
     except Exception as e:
-        logger.error(f"Job skip handling failed: {e}")
         return False
 
 
@@ -625,5 +588,5 @@ def reset_planet_retry_count(planet_id: str) -> None:
     """
     try:
         Planet.objects.filter(planet_id=planet_id).update(error_retry_count=0)
-    except Exception as e:
-        logger.warning(f"Could not reset retry count for {planet_id}: {e}")
+    except Exception:
+        pass

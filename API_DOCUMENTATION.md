@@ -47,9 +47,18 @@ ws.Connect();
   "next_round_time": "2025-12-18T12:00:00Z"  // ISO 8601 datetime string for next round
 }
 
+// Job Skipped (round time not expired yet)
+{
+  "type": "job_skipped",
+  "planet_id": "planet_001",
+  "next_round_time": "2025-12-18T12:00:00Z",
+  "reason": "Round time remaining: 5.2 minutes"
+}
+
 // Error Report
 {
   "type": "error",
+  "planet_id": "planet_001",
   "error": "Failed to load planet assets"
 }
 

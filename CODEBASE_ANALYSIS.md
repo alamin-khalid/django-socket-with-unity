@@ -152,12 +152,14 @@ def assign_available_planets():
 | `assign_job_to_server` | Dispatch job via WebSocket | Assignment service |
 | `handle_job_completion` | Process success from Unity | WebSocket message |
 | `handle_job_error` | Handle failures with retry | WebSocket message |
-| `check_server_health` | Detect stale servers | Celery Beat (every 10s) |
+| `handle_job_skipped` | Requeue when round time not expired | WebSocket message |
+| `check_server_health` | Detect stale servers | Celery Beat (every 5s) |
 
 **Error Handling:**
-- Max 5 retries with immediate requeue
+- Max 5 retries with **exponential backoff** (1s, 2s, 4s, 8s, 16s)
+- Respects `next_round_time` - uses whichever is later (backoff or scheduled time)
 - Single TaskHistory record reused across retries
-- After max retries: planet marked `error`, not requeued
+- After max retries: auto-resets and waits 30 seconds
 
 ---
 
@@ -171,6 +173,7 @@ Handles real-time bidirectional communication:
 | `heartbeat` | "I'm alive" + CPU/RAM metrics |
 | `status_update` | "I'm idle/busy" |
 | `job_done` | "Finished planet X, next round at Y" |
+| `job_skipped` | "Round time not expired, requeue for Y" |
 | `error` | "Failed to process planet X" |
 
 **Django → Unity:**

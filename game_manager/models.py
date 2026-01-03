@@ -318,7 +318,6 @@ def remove_planet_from_queue_on_delete(sender, instance, **kwargs) -> None:
         from .redis_queue import remove_from_queue
         remove_from_queue(instance.planet_id)
     except Exception as e:
-        import logging
         logging.getLogger(__name__).warning(
             f"Could not remove {instance.planet_id} from queue: {e}"
         )

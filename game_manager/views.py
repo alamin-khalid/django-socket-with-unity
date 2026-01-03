@@ -43,14 +43,11 @@ from django.utils import timezone
 from django.shortcuts import render
 from django.views import View
 from typing import Dict, Any
-import logging
 
 from .models import Planet, TaskHistory, UnityServer
 from .serializers import PlanetSerializer, UnityServerSerializer
 from .redis_queue import get_queue_size, peek_next_due_time
 from .utils import send_command_to_server
-
-logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -184,9 +181,9 @@ def create_planet(request) -> Response:
             from .assignment_service import assign_available_planets
             assign_available_planets()
             
-        except Exception as e:
-            # Log but don't fail - planet is created, queue is secondary
-            logger.error(f"Failed to queue/assign planet {planet_obj.planet_id}: {e}")
+        except Exception:
+            # Planet is created, queue is secondary - continue silently
+            pass
         
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     else:
@@ -433,7 +430,6 @@ class DashboardView(View):
             database queries when accessing planet and server data.
         """
         from django.db.models import Avg
-        from .log_handler import get_recent_logs
         
         # --- Fetch Core Data ---
         servers = UnityServer.objects.all().order_by('server_id')
@@ -446,8 +442,7 @@ class DashboardView(View):
             'planet', 'server'
         ).order_by('-start_time')[:50]
         
-        # --- System Logs from Redis ---
-        system_logs = get_recent_logs(limit=100)
+
         
         # --- Aggregate Statistics ---
         total_tasks = TaskHistory.objects.count()
@@ -492,9 +487,6 @@ class DashboardView(View):
             'offline_servers': offline_servers,
             'not_init_servers': not_init_servers,
             'total_servers': servers.count(),
-            
-            # System logs
-            'system_logs': system_logs,
             
             # Timestamp
             'server_time': timezone.now(),
@@ -558,35 +550,6 @@ class TaskHistoryView(View):
         
         return render(request, 'game_manager/task_history.html', context)
 
-
-class SystemLogsView(View):
-    """
-    Full system logs view with filtering capabilities.
-    
-    Shows all 1000 logs from Redis buffer (vs. 100 on dashboard).
-    Provides search and level filtering via client-side JavaScript.
-    
-    Template: game_manager/system_logs.html
-    URL: /system-logs/
-    """
-    
-    def get(self, request) -> render:
-        """
-        Render system logs page with all buffered logs.
-        
-        Fetches up to 1000 logs from Redis circular buffer.
-        Unlike dashboard which shows 100, this page shows all available.
-        """
-        from .log_handler import get_recent_logs
-        
-        system_logs = get_recent_logs(limit=1000)
-        
-        context = {
-            'system_logs': system_logs,
-            'server_time': timezone.now(),
-        }
-        
-        return render(request, 'game_manager/system_logs.html', context)
 
 
 

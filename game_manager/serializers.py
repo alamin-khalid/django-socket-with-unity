@@ -1,3 +1,16 @@
+"""
+Game Manager - Django REST Framework Serializers
+=================================================
+
+Serializers for converting Django models to/from JSON for REST API endpoints.
+
+Serializers
+-----------
+- PlanetSerializer: Planet configuration and status
+- UnityServerSerializer: Server metrics and connection state
+- TaskHistorySerializer: Job execution history
+"""
+
 from rest_framework import serializers
 from .models import Planet, TaskHistory, UnityServer
 

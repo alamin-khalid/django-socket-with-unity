@@ -53,9 +53,7 @@ from redis.exceptions import RedisError, ConnectionError
 from django.conf import settings
 from datetime import datetime
 from typing import List, Tuple, Optional
-import logging
 
-logger = logging.getLogger(__name__)
 
 # =============================================================================
 # CONFIGURATION
@@ -108,7 +106,6 @@ def _get_redis_client() -> Optional[redis.Redis]:
         client.ping()
         return client
     except (RedisError, ConnectionError) as e:
-        logger.error(f"Redis connection failed: {e}")
         return None
 
 
@@ -142,20 +139,15 @@ def add_planet_to_queue(planet_id: str, next_round_time: datetime) -> bool:
     try:
         client = _get_redis_client()
         if not client:
-            logger.warning(
-                f"Queue unavailable, planet {planet_id} not queued to Redis"
-            )
             return False
 
         # Convert datetime to Unix timestamp for Redis score
         score = next_round_time.timestamp()
         client.zadd(QUEUE_KEY, {planet_id: score})
         
-        logger.info(f"[Queue] Added planet {planet_id} for {next_round_time}")
         return True
         
     except RedisError as e:
-        logger.error(f"Failed to queue planet {planet_id}: {e}")
         return False
 
 
@@ -208,7 +200,6 @@ def get_due_planets(limit: int = 10) -> List[str]:
         ]
         
     except RedisError as e:
-        logger.error(f"Failed to get due planets: {e}")
         return []
 
 
@@ -238,15 +229,12 @@ def remove_from_queue(planet_id: str) -> bool:
     try:
         client = _get_redis_client()
         if not client:
-            logger.warning(f"Queue unavailable, could not remove planet {planet_id}")
             return False
 
         client.zrem(QUEUE_KEY, planet_id)
-        logger.info(f"[Queue] Removed planet {planet_id} from queue")
         return True
         
     except RedisError as e:
-        logger.error(f"Failed to remove planet {planet_id} from queue: {e}")
         return False
 
 
@@ -274,7 +262,6 @@ def get_queue_size() -> int:
             return 0
         return client.zcard(QUEUE_KEY)
     except RedisError as e:
-        logger.error(f"Failed to get queue size: {e}")
         return 0
 
 
@@ -310,7 +297,6 @@ def peek_next_due_time() -> Optional[datetime]:
         return None
         
     except RedisError as e:
-        logger.error(f"Failed to peek next due time: {e}")
         return None
 
 
@@ -348,5 +334,4 @@ def get_all_queued_planets() -> List[Tuple[str, datetime]]:
         ]
         
     except RedisError as e:
-        logger.error(f"Failed to get all queued planets: {e}")
         return []

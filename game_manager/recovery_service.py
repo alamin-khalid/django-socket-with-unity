@@ -12,19 +12,14 @@ Functions
 ---------
 - recover_orphaned_job(): Recover a single orphaned job from a server
 - recover_error_planets(): Auto-recover planets stuck in error status
-
-Author: Krada Games
-Last Modified: 2024-12
 """
 
 from django.utils import timezone
 from typing import Optional
-import logging
 
 from .models import UnityServer, Planet, TaskHistory
 from .redis_queue import add_planet_to_queue
 
-logger = logging.getLogger(__name__)
 
 
 def recover_orphaned_job(server: UnityServer, reason: str = "Server offline") -> Optional[str]:
@@ -60,7 +55,6 @@ def recover_orphaned_job(server: UnityServer, reason: str = "Server offline") ->
     planet = server.current_task
     planet_id = planet.planet_id
     
-    logger.info(f"[Recovery] ♻ Recovering job {planet_id} from {server.server_id}: {reason}")
     
     # --- Reset Planet State ---
     planet.status = 'queued'
@@ -80,10 +74,7 @@ def recover_orphaned_job(server: UnityServer, reason: str = "Server offline") ->
         end_time=timezone.now(),
         error_message=reason
     )
-    
-    if updated:
-        logger.debug(f"[Recovery] Updated {updated} TaskHistory record(s) to timeout")
-    
+
     # --- Clear Server's Task Reference ---
     server.current_task = None
     server.save(update_fields=['current_task'])
@@ -123,10 +114,6 @@ def recover_error_planets(limit: int = 20) -> int:
     recovered_count = 0
     
     for planet in error_planets:
-        logger.info(
-            f"[Recovery] Auto-recovering error planet {planet.planet_id} "
-            f"(was at retry {planet.error_retry_count})"
-        )
         
         planet.status = 'queued'
         planet.error_retry_count = 0
@@ -136,8 +123,5 @@ def recover_error_planets(limit: int = 20) -> int:
         
         add_planet_to_queue(planet.planet_id, planet.next_round_time)
         recovered_count += 1
-    
-    if recovered_count > 0:
-        logger.info(f"[Recovery] Auto-recovered {recovered_count} error planets")
     
     return recovered_count

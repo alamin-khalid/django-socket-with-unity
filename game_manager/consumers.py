@@ -54,11 +54,9 @@ from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.utils import timezone
 from typing import Dict, Any, Optional
-import logging
 
 from .models import UnityServer, Planet, TaskHistory
 
-logger = logging.getLogger(__name__)
 
 
 class ServerConsumer(AsyncJsonWebsocketConsumer):
@@ -117,7 +115,6 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         # Create or update server record in database
         await self.register_server()
         
-        logger.info(f"[WebSocket] ✅ Server {self.server_id} connected and registered")
         
         # Delay before assignment to prevent duplicate jobs on reconnect
         # This gives the system time to stabilize and prevents race conditions
@@ -140,7 +137,6 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         Args:
             close_code: WebSocket close code (1000 = normal, others = error)
         """
-        logger.info(f"[WebSocket] Server {self.server_id} disconnecting (code: {close_code})")
         
         # Mark offline and recover orphaned jobs
         await self.mark_server_offline()
@@ -151,7 +147,6 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
             self.channel_name
         )
         
-        logger.info(f"[WebSocket] ❌ Server {self.server_id} disconnected and cleaned up")
 
     # =========================================================================
     # MESSAGE ROUTING
@@ -206,10 +201,6 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         """
         message_type = content.get('type', 'unknown')
         
-        # Skip logging heartbeat messages - too frequent
-        if message_type != 'heartbeat':
-            logger.debug(f"[WebSocket] ⬇ Received from {self.server_id}: {message_type}")
-        
         # Route to appropriate handler
         if message_type == 'heartbeat':
             await self.handle_heartbeat(content)
@@ -238,7 +229,7 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
             await self.handle_disconnect(content)
             
         else:
-            logger.warning(f"[WebSocket] Unknown message type: {message_type}")
+            pass  # Unknown message type - silently ignore
 
     # =========================================================================
     # INCOMING MESSAGE HANDLERS
@@ -276,8 +267,8 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
             
             UnityServer.objects.filter(server_id=self.server_id).update(**update_fields)
             
-        except Exception as e:
-            logger.error(f"[Heartbeat] Error updating {self.server_id}: {e}")
+        except Exception:
+            pass
 
     @database_sync_to_async
     def handle_status_update(self, data: Dict[str, Any]) -> None:
@@ -296,9 +287,8 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         
         try:
             UnityServer.objects.filter(server_id=self.server_id).update(status=status)
-            logger.info(f"[Status] {self.server_id} → {status}")
-        except Exception as e:
-            logger.error(f"[Status] Error updating {self.server_id}: {e}")
+        except Exception:
+            pass
 
     async def _handle_status_update_with_assignment(self, data: Dict[str, Any]) -> None:
         """
@@ -351,11 +341,9 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
             current_round_number = data.get('round_number')
             
             if not planet_id:
-                logger.warning("[Job Done] Missing planet_id")
                 return
                 
             if not next_round_time:
-                logger.warning(f"[Job Done] Missing next_round_time for {planet_id}")
                 return
             
             # Dispatch to Celery for async processing
@@ -368,10 +356,9 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
                 current_round_number=int(current_round_number) if current_round_number else None
             )
             
-            logger.info(f"[Job Done] {self.server_id} completed {planet_id}")
             
         except Exception as e:
-            logger.error(f"[Job Done] Error processing: {e}")
+            pass
 
     @database_sync_to_async
     def handle_error(self, data: Dict[str, Any]) -> None:
@@ -390,7 +377,6 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         planet_id = data.get('planet_id')
         error_message = data.get('error', 'Unknown error')
         
-        logger.warning(f"[Error] {self.server_id} reported: {error_message}")
         
         if planet_id:
             handle_job_error.delay(str(planet_id), self.server_id, error_message)
@@ -419,7 +405,6 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         next_round_time = data.get('next_round_time')
         reason = data.get('reason', 'Calculation skipped')
         
-        logger.info(f"[Job Skipped] {self.server_id} skipped {planet_id}: {reason}")
         
         if planet_id and next_round_time:
             handle_job_skipped.delay(
@@ -440,7 +425,6 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         Args:
             data: Disconnect payload (currently unused)
         """
-        logger.info(f"[Disconnect] {self.server_id} is disconnecting gracefully")
 
     # =========================================================================
     # OUTGOING MESSAGE HANDLERS (Django → Unity)
@@ -473,7 +457,6 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
             event: Channel layer event from Celery task
         """
         planet_id = event.get('planet_id')
-        logger.info(f"[Job Assignment] ⬆ Sending to {self.server_id}: Planet {planet_id}")
         
         await self.send_json({
             'type': 'assign_job',
@@ -493,7 +476,6 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
             event: Command event with 'command' and optional 'params'
         """
         command = event.get('command')
-        logger.info(f"[Command] ⬆ Sending to {self.server_id}: {command}")
         
         await self.send_json({
             'type': 'command',
@@ -541,10 +523,9 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
                     'disconnected_at': None
                 }
             )
-            logger.info(f"[Register] Server registered: {self.server_id} ({server_ip})")
             
         except Exception as e:
-            logger.error(f"[Register] Error registering {self.server_id}: {e}")
+            pass
 
     async def trigger_assignment(self) -> None:
         """
@@ -559,10 +540,9 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
             
             # Run sync function in thread pool
             result = await database_sync_to_async(assign_available_planets)()
-            logger.debug(f"[Assignment] ⚡ Result: {result}")
             
         except Exception as e:
-            logger.error(f"[Assignment] Error triggering: {e}")
+            pass
 
     @database_sync_to_async
     def mark_server_offline(self) -> None:
@@ -581,13 +561,10 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
                 return
             
             # Use centralized recovery service for orphaned jobs
-            planet_id = recover_orphaned_job(server, "WebSocket disconnect")
-            if planet_id:
-                logger.info(f"[Recovery] ♻ Recovered job {planet_id} from {self.server_id}")
+            recover_orphaned_job(server, "WebSocket disconnect")
             
             # Mark server as offline
             server.mark_disconnected()
-            logger.info(f"[Offline] Server {self.server_id} marked offline")
             
         except Exception as e:
-            logger.error(f"[Offline] Error marking {self.server_id} offline: {e}")
+            print(e)

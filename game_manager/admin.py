@@ -1,3 +1,13 @@
+"""
+Game Manager - Django Admin Configuration
+==========================================
+
+Registers models for the Django admin interface, providing
+CRUD operations and filtering for UnityServer, Planet, and TaskHistory.
+
+Access: /admin/
+"""
+
 from django.contrib import admin
 from .models import UnityServer, Planet, TaskHistory
 

@@ -63,12 +63,10 @@ Last Modified: 2024-12
 """
 
 from typing import List
-from celery.utils.log import get_task_logger
 
 from .models import UnityServer, Planet, TaskHistory
 from .redis_queue import get_due_planets, remove_from_queue
 
-logger = get_task_logger(__name__)
 
 
 def assign_available_planets() -> str:
@@ -133,10 +131,6 @@ def assign_available_planets() -> str:
         _log_server_statistics()
         return f"No idle servers for {len(due_planet_ids)} due planets"
     
-    logger.info(
-        f"Assigning planets: {len(due_planet_ids)} pending, "
-        f"{len(idle_servers)} servers available"
-    )
     
     # =========================================================================
     # STEP 4: Match planets to servers
@@ -145,7 +139,6 @@ def assign_available_planets() -> str:
     
     for planet_id in due_planet_ids:
         if not idle_servers:
-            logger.info("No more idle servers, stopping assignment")
             break
         
         try:
@@ -163,10 +156,6 @@ def assign_available_planets() -> str:
             now = timezone.now()
             if planet_obj.next_round_time and planet_obj.next_round_time > now:
                 time_remaining = (planet_obj.next_round_time - now).total_seconds()
-                logger.info(
-                    f"Skipping planet {planet_id} - next_round_time is "
-                    f"{time_remaining:.0f}s in the future"
-                )
                 # Remove from Redis queue - it shouldn't be there if time hasn't come
                 remove_from_queue(planet_id)
                 continue
@@ -189,16 +178,13 @@ def assign_available_planets() -> str:
             remove_from_queue(planet_id)
             
             assigned_count += 1
-            logger.info(f"Assigned planet {planet_id} to server {server.server_id}")
             
         except Planet.DoesNotExist:
             # Planet was deleted or already being processed
-            logger.warning(f"Planet {planet_id} not found or not queued")
             remove_from_queue(planet_id)  # Clean up stale Redis entry
             continue
             
         except Exception as e:
-            logger.error(f"Error assigning planet {planet_id}: {e}")
             continue
     
     return f"Assigned {assigned_count} planets"
@@ -236,15 +222,11 @@ def _recover_missed_planets() -> List[str]:
     
     if missed_planets.exists():
         count = missed_planets.count()
-        logger.warning(
-            f"Found {count} queued planets in DB missing from Redis. Re-queueing..."
-        )
         
         for planet_obj in missed_planets:
             add_planet_to_queue(planet_obj.planet_id, planet_obj.next_round_time)
             recovered_ids.append(planet_obj.planet_id)
         
-        logger.info(f"Recovered {len(recovered_ids)} planets from DB fallback")
     
     return recovered_ids
 
@@ -262,4 +244,3 @@ def _log_server_statistics() -> None:
         'offline': UnityServer.objects.filter(status='offline').count(),
         'total': UnityServer.objects.count()
     }
-    logger.debug(f"Server statistics: {stats}")

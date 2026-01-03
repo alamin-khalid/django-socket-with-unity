@@ -38,11 +38,9 @@ Author: AL AMIN KHALID
 Last Modified: 2024-12
 """
 
-import logging
 from .models import UnityServer
 from .recovery_service import recover_orphaned_job
 
-logger = logging.getLogger(__name__)
 
 
 def reset_all_servers_offline() -> None:
@@ -87,9 +85,3 @@ def reset_all_servers_offline() -> None:
     print("=" * 60)
     print(f"[Startup] Marked {server_count} servers offline, recovered {recovered_jobs} jobs")
     print("=" * 60)
-    
-    if recovered_jobs > 0:
-        logger.info(
-            f"Startup recovery: {server_count} servers reset, "
-            f"{recovered_jobs} orphaned jobs requeued"
-        )

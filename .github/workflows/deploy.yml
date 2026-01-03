@@ -37,14 +37,22 @@ jobs:
             python manage.py migrate --noinput
             python manage.py collectstatic --noinput
 
-            # Clean all logs (systemd journal + nginx + redis)
-            echo "🧹 Cleaning logs..."
+            # Clean logs and cache
+            echo "🧹 Cleaning logs and cache..."
+            
+            # System logs
             sudo journalctl --rotate 2>/dev/null || true
             sudo journalctl --vacuum-time=1s 2>/dev/null || true
+            
+            # Nginx logs
             sudo truncate -s 0 /var/log/nginx/access.log 2>/dev/null || true
             sudo truncate -s 0 /var/log/nginx/error.log 2>/dev/null || true
-            redis-cli DEL system_logs 2>/dev/null || true
-            echo "✅ Logs cleaned"
+            
+            # Python cache
+            find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+            find . -type f -name "*.pyc" -delete 2>/dev/null || true
+            
+            echo "✅ Logs and cache cleaned"
 
             # Restart Daphne
             sudo systemctl restart daphne

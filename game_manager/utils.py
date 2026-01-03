@@ -1,9 +1,33 @@
+"""
+Game Manager - Utility Functions
+=================================
+
+Helper functions for sending commands to Unity servers via WebSocket.
+
+Functions
+---------
+- send_command_to_server(): Send command to specific Unity server
+"""
+
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
-def send_command_to_server(server_id, action, payload=None):
+
+def send_command_to_server(server_id: str, action: str, payload: dict = None) -> bool:
     """
-    Sends a command to a specific Unity server via WebSockets.
+    Send a command to a specific Unity server via WebSocket channel layer.
+    
+    Args:
+        server_id: Target server identifier (e.g., 'unity_192_168_1_100')
+        action: Command action type (e.g., 'restart_server', 'stop_game')
+        payload: Optional additional data for the command
+    
+    Returns:
+        bool: True if command was sent successfully
+    
+    Example:
+        >>> send_command_to_server('unity_001', 'restart_server')
+        >>> send_command_to_server('unity_001', 'custom_action', {'key': 'value'})
     """
     if payload is None:
         payload = {}
