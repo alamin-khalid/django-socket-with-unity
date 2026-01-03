@@ -119,8 +119,13 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         
         logger.info(f"[WebSocket] ✅ Server {self.server_id} connected and registered")
         
-        # Immediately check for pending work
-        # This provides instant job assignment without waiting for scheduler
+        # Delay before assignment to prevent duplicate jobs on reconnect
+        # This gives the system time to stabilize and prevents race conditions
+        # with the scheduler. Unity will send status_update:idle when truly ready.
+        import asyncio
+        await asyncio.sleep(5)
+        
+        # Check for pending work after delay
         await self.trigger_assignment()
 
     async def disconnect(self, close_code: int) -> None:

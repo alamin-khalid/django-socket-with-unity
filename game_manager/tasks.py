@@ -286,7 +286,10 @@ def handle_job_completion(
         planet_obj.save()
         
         # --- Free Server ---
-        server.status = 'idle'
+        # NOTE: Do NOT set server.status = 'idle' here!
+        # Unity will send a separate 'status_update: idle' message when it's truly ready.
+        # Setting idle here + Unity sending idle causes duplicate job assignments.
+        # Unity is the single source of truth for when it can accept new work.
         server.current_task = None
         server.total_completed_planet += 1
         server.save()
@@ -465,7 +468,8 @@ def handle_job_error(planet_id: str, server_id: str, error_message: str) -> Unio
             task_history.save()
         
         # --- Free Server ---
-        server.status = 'idle'
+        # NOTE: Do NOT set server.status = 'idle' here!
+        # Unity will send 'status_update: idle' when ready for new work.
         server.current_task = None
         # Note: total_failed_planet is only incremented when max retries are exceeded
         # to accurately reflect permanently failed jobs, not temporary retry errors
