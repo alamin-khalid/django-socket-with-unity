@@ -152,6 +152,25 @@ def assign_available_planets() -> str:
             # Verify planet exists and is in queued state
             planet_obj = Planet.objects.get(planet_id=planet_id, status='queued')
             
+            # -----------------------------------------------------------
+            # DUPLICATE PREVENTION: Skip if next_round_time is in future
+            # This prevents the Completed → Skipped cycle where planets
+            # get assigned immediately after completion but before their
+            # scheduled time has actually arrived.
+            # -----------------------------------------------------------
+            from django.utils import timezone
+            
+            now = timezone.now()
+            if planet_obj.next_round_time and planet_obj.next_round_time > now:
+                time_remaining = (planet_obj.next_round_time - now).total_seconds()
+                logger.info(
+                    f"Skipping planet {planet_id} - next_round_time is "
+                    f"{time_remaining:.0f}s in the future"
+                )
+                # Remove from Redis queue - it shouldn't be there if time hasn't come
+                remove_from_queue(planet_id)
+                continue
+            
             # Pop next idle server (least loaded)
             server = idle_servers.pop(0)
             
