@@ -500,15 +500,28 @@ def handle_job_error(planet_id: str, server_id: str, error_message: str) -> Unio
         # --- Exponential Backoff Retry ---
         # Delay sequence: 1s, 2s, 4s, 8s, 16s (2^(retry_count-1) seconds)
         backoff_delay = 2 ** (retry_count - 1)  # 1, 2, 4, 8, 16 seconds
+        backoff_time = timezone.now() + timedelta(seconds=backoff_delay)
+        
+        # Check if planet's next_round_time is in the future
+        # If so, use that instead of backoff (respect the scheduled time)
+        if planet_obj.next_round_time and planet_obj.next_round_time > backoff_time:
+            requeue_time = planet_obj.next_round_time
+            logger.info(
+                f"Planet {planet_id} next_round_time ({planet_obj.next_round_time}) is in future, "
+                f"using scheduled time instead of backoff"
+            )
+        else:
+            requeue_time = backoff_time
+        
         planet_obj.status = 'queued'
         planet_obj.processing_server = None
-        planet_obj.next_round_time = timezone.now() + timedelta(seconds=backoff_delay)
+        planet_obj.next_round_time = requeue_time
         planet_obj.save()
         
         # Add back to Redis queue
         add_planet_to_queue(planet_obj.planet_id, planet_obj.next_round_time)
         
-        logger.info(f"Job error handled for {planet_id} - retry {retry_count} queued with {backoff_delay}s delay")
+        logger.info(f"Job error handled for {planet_id} - retry {retry_count} queued for {requeue_time}")
         return f"Planet {planet_id} retry {retry_count} queued (delay: {backoff_delay}s)"
         
     except Exception as e:
