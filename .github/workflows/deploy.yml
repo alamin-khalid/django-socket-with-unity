@@ -37,10 +37,10 @@ jobs:
             python manage.py migrate --noinput
             python manage.py collectstatic --noinput
 
-            # Clean all logs
+            # Clean all logs (systemd journal + nginx + redis)
             echo "🧹 Cleaning logs..."
-            sudo truncate -s 0 /var/log/daphne/*.log 2>/dev/null || true
-            sudo truncate -s 0 /var/log/celery/*.log 2>/dev/null || true
+            sudo journalctl --rotate 2>/dev/null || true
+            sudo journalctl --vacuum-time=1s 2>/dev/null || true
             sudo truncate -s 0 /var/log/nginx/access.log 2>/dev/null || true
             sudo truncate -s 0 /var/log/nginx/error.log 2>/dev/null || true
             redis-cli DEL system_logs 2>/dev/null || true
