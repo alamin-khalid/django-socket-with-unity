@@ -234,44 +234,6 @@
                 </table>
             </div>
         </div>
-
-        <!-- System Logs Section -->
-        <div class="section">
-            <h2 style="display: flex; justify-content: space-between; align-items: center;">
-                <span>📋 System Logs (Last 100)</span>
-                <div style="display: flex; gap: 10px; align-items: center;">
-                    <select id="logLevelFilter"
-                        style="padding: 5px 10px; border-radius: 4px; border: 1px solid #ddd; background: inherit; color: inherit;">
-                        <option value="ALL">All Levels</option>
-                        <option value="DEBUG">DEBUG</option>
-                        <option value="INFO">INFO</option>
-                        <option value="WARNING">WARNING</option>
-                        <option value="ERROR">ERROR</option>
-                    </select>
-                    <label style="display: flex; align-items: center; gap: 5px; font-size: 14px;">
-                        <input type="checkbox" id="logAutoScroll" checked>
-                        Auto-scroll
-                    </label>
-                    <a href="/system-logs/"
-                        style="font-size: 14px; color: #9b59b6; text-decoration: none; font-weight: normal;">View All
-                        →</a>
-                </div>
-            </h2>
-            <div id="logContainer" class="log-container"
-                style="max-height: 400px; overflow-y: auto; background: #1a1a2e; border-radius: 8px; padding: 15px; font-family: 'Consolas', 'Monaco', monospace; font-size: 12px;">
-                {% for log in system_logs %}
-                <div class="log-entry log-{{ log.level|lower }}" data-level="{{ log.level }}">
-                    <span class="log-time" style="color: #888;">{{ log.timestamp }}</span>
-                    <span class="log-level log-level-{{ log.level|lower }}"
-                        style="font-weight: bold; padding: 0 5px;">{{ log.level }}</span>
-                    <span class="log-logger" style="color: #9b59b6;">[{{ log.logger|slice:":25" }}]</span>
-                    <span class="log-message" style="color: #ecf0f1;">{{ log.message }}</span>
-                </div>
-                {% empty %}
-                <div class="no-data" style="color: #888; text-align: center; padding: 20px;">No logs available yet</div>
-                {% endfor %}
-            </div>
-        </div>
     </div>
 
     <script>
@@ -445,72 +407,7 @@
         enabledCheckbox.addEventListener('change', (e) => {
             setRefreshInterval(parseInt(slider.value), e.target.checked);
         });
-
-        // Log level filtering
-        const logFilter = document.getElementById('logLevelFilter');
-        const logContainer = document.getElementById('logContainer');
-        const logAutoScroll = document.getElementById('logAutoScroll');
-
-        if (logFilter) {
-            logFilter.addEventListener('change', (e) => {
-                const level = e.target.value;
-                document.querySelectorAll('.log-entry').forEach(entry => {
-                    if (level === 'ALL' || entry.dataset.level === level) {
-                        entry.style.display = 'block';
-                    } else {
-                        entry.style.display = 'none';
-                    }
-                });
-            });
-        }
-
-        // Auto-scroll to bottom on load if enabled
-        if (logContainer && logAutoScroll && logAutoScroll.checked) {
-            logContainer.scrollTop = logContainer.scrollHeight;
-        }
     </script>
-
-    <style>
-        /* Log entry styles */
-        .log-entry {
-            padding: 3px 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .log-entry:hover {
-            background: rgba(255, 255, 255, 0.05);
-            white-space: normal;
-        }
-
-        .log-level-debug {
-            color: #95a5a6;
-        }
-
-        .log-level-info {
-            color: #3498db;
-        }
-
-        .log-level-warning {
-            color: #f39c12;
-        }
-
-        .log-level-error {
-            color: #e74c3c;
-        }
-
-        .log-level-critical {
-            color: #e74c3c;
-            background: rgba(231, 76, 60, 0.2);
-        }
-
-        /* Dark mode log container */
-        .dark-mode .log-container {
-            background: #0d0d1a;
-        }
-    </style>
 </body>
 
 </html>
