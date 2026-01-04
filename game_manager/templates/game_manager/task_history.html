@@ -181,8 +181,6 @@
 
         .table-wrapper {
             overflow-x: auto;
-            max-height: 60vh;
-            overflow-y: auto;
         }
 
         table {
@@ -199,18 +197,24 @@
         }
 
         th {
-            background-color: var(--th-bg);
-            color: var(--text-secondary);
+            background-color: var(--accent);
+            color: white;
             font-weight: 600;
             font-size: 13px;
             text-transform: uppercase;
-            position: sticky;
-            top: 0;
-            z-index: 10;
         }
 
-        tr:hover {
-            background-color: var(--th-bg);
+        /* Striped/Accented table rows */
+        tbody tr:nth-child(odd) {
+            background-color: rgba(155, 89, 182, 0.08);
+        }
+
+        tbody tr:nth-child(even) {
+            background-color: var(--bg-card);
+        }
+
+        tbody tr:hover {
+            background-color: rgba(155, 89, 182, 0.15);
         }
 
         /* Status Badges */
@@ -344,15 +348,31 @@
                 <input type="text" class="search-input" id="searchInput"
                     placeholder="Search by Planet ID, Server, or Status...">
             </div>
-            <div class="page-size-control">
-                <label>Show:</label>
-                <select class="page-size-select" id="pageSizeSelect">
-                    <option value="10">10</option>
-                    <option value="25" selected>25</option>
-                    <option value="50">50</option>
-                    <option value="100">100</option>
-                    <option value="all">All</option>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                <select id="filterStatus" class="page-size-select">
+                    <option value="">All Status</option>
+                    <option value="completed">Completed</option>
+                    <option value="skipped">Skipped</option>
+                    <option value="started">Started</option>
+                    <option value="failed">Failed</option>
+                    <option value="timeout">Timeout</option>
                 </select>
+                <select id="filterPlanet" class="page-size-select">
+                    <option value="">All Planets</option>
+                </select>
+                <select id="filterServer" class="page-size-select">
+                    <option value="">All Servers</option>
+                </select>
+                <div class="page-size-control">
+                    <label>Show:</label>
+                    <select class="page-size-select" id="pageSizeSelect">
+                        <option value="10">10</option>
+                        <option value="25" selected>25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                        <option value="all">All</option>
+                    </select>
+                </div>
             </div>
         </div>
 
@@ -469,25 +489,33 @@
             return `${Math.floor(seconds / 86400)}d ago`;
         }
 
-        // Filter tasks based on search query
+        // Filter tasks based on search query and dropdown filters
         function filterTasks() {
             const query = searchQuery.toLowerCase().trim();
+            const statusFilter = document.getElementById('filterStatus').value.toLowerCase();
+            const planetFilter = document.getElementById('filterPlanet').value;
+            const serverFilter = document.getElementById('filterServer').value;
 
-            if (!query) {
-                filteredTasks = [...allTasks];
-            } else {
-                filteredTasks = allTasks.filter(task => {
-                    const planetId = (task.planet_id || '').toLowerCase();
-                    const serverId = (task.server_id || '').toLowerCase();
-                    const status = (task.status || '').toLowerCase();
-                    const error = (task.error_message || '').toLowerCase();
+            filteredTasks = allTasks.filter(task => {
+                const planetId = (task.planet_id || '');
+                const serverId = (task.server_id || '');
+                const status = (task.status || '').toLowerCase();
+                const error = (task.error_message || '').toLowerCase();
 
-                    return planetId.includes(query) ||
-                        serverId.includes(query) ||
-                        status.includes(query) ||
-                        error.includes(query);
-                });
-            }
+                // Dropdown filters
+                const statusMatch = !statusFilter || status === statusFilter;
+                const planetMatch = !planetFilter || planetId === planetFilter;
+                const serverMatch = !serverFilter || serverId === serverFilter;
+
+                // Search query (if any)
+                const queryMatch = !query ||
+                    planetId.toLowerCase().includes(query) ||
+                    serverId.toLowerCase().includes(query) ||
+                    status.includes(query) ||
+                    error.includes(query);
+
+                return statusMatch && planetMatch && serverMatch && queryMatch;
+            });
 
             currentPage = 1;
             renderTable();
@@ -640,6 +668,35 @@
             renderPagination();
             updateStats();
         });
+
+        // Dropdown filter listeners
+        document.getElementById('filterStatus').addEventListener('change', filterTasks);
+        document.getElementById('filterPlanet').addEventListener('change', filterTasks);
+        document.getElementById('filterServer').addEventListener('change', filterTasks);
+
+        // Populate planet and server dropdowns
+        function populateDropdowns() {
+            const planetSelect = document.getElementById('filterPlanet');
+            const serverSelect = document.getElementById('filterServer');
+
+            const planets = [...new Set(allTasks.map(t => t.planet_id).filter(Boolean))].sort();
+            const servers = [...new Set(allTasks.map(t => t.server_id).filter(Boolean))].sort();
+
+            planets.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p;
+                opt.textContent = p;
+                planetSelect.appendChild(opt);
+            });
+
+            servers.forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s;
+                opt.textContent = s;
+                serverSelect.appendChild(opt);
+            });
+        }
+        populateDropdowns();
 
         // Initialize
         filterTasks();

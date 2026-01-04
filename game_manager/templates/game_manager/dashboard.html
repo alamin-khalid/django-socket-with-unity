@@ -179,13 +179,39 @@
 
         <!-- Task History Section -->
         <div class="section">
-            <h2 style="display: flex; justify-content: space-between; align-items: center;">
+            <h2 style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                 <span>📊 Task History (Recent 50)</span>
-                <a href="/task-history/"
-                    style="font-size: 14px; color: #9b59b6; text-decoration: none; font-weight: normal;">View All →</a>
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <select id="filterStatus"
+                        style="padding: 5px 10px; border-radius: 4px; border: 1px solid #555; background: inherit; color: inherit;">
+                        <option value="">All Status</option>
+                        <option value="completed">Completed</option>
+                        <option value="skipped">Skipped</option>
+                        <option value="started">Started</option>
+                        <option value="failed">Failed</option>
+                        <option value="timeout">Timeout</option>
+                    </select>
+                    <select id="filterPlanet"
+                        style="padding: 5px 10px; border-radius: 4px; border: 1px solid #555; background: inherit; color: inherit;">
+                        <option value="">All Planets</option>
+                        {% for task in recent_tasks %}
+                        <option value="{{ task.planet.planet_id }}">{{ task.planet.planet_id }}</option>
+                        {% endfor %}
+                    </select>
+                    <select id="filterServer"
+                        style="padding: 5px 10px; border-radius: 4px; border: 1px solid #555; background: inherit; color: inherit;">
+                        <option value="">All Servers</option>
+                        {% for server in servers %}
+                        <option value="{{ server.server_id|mask_ip }}">{{ server.server_id|mask_ip }}</option>
+                        {% endfor %}
+                    </select>
+                    <a href="/task-history/"
+                        style="font-size: 14px; color: #9b59b6; text-decoration: none; font-weight: normal;">View All
+                        →</a>
+                </div>
             </h2>
             <div class="table-wrapper">
-                <table>
+                <table id="taskHistoryTable">
                     <thead>
                         <tr>
                             <th>Planet ID</th>
@@ -198,7 +224,9 @@
                     </thead>
                     <tbody>
                         {% for task in recent_tasks %}
-                        <tr>
+                        <tr data-planet="{{ task.planet.planet_id }}"
+                            data-server="{% if task.server %}{{ task.server.server_id|mask_ip }}{% endif %}"
+                            data-status="{{ task.status }}">
                             <td><strong>{{ task.planet.planet_id }}</strong></td>
                             <td>
                                 {% if task.server %}
@@ -406,6 +434,45 @@
         enabledCheckbox.addEventListener('change', (e) => {
             setRefreshInterval(parseInt(slider.value), e.target.checked);
         });
+
+        // Task History filtering
+        function filterTaskHistory() {
+            const statusFilter = document.getElementById('filterStatus').value.toLowerCase();
+            const planetFilter = document.getElementById('filterPlanet').value;
+            const serverFilter = document.getElementById('filterServer').value;
+
+            const rows = document.querySelectorAll('#taskHistoryTable tbody tr[data-status]');
+
+            rows.forEach(row => {
+                const status = row.dataset.status || '';
+                const planet = row.dataset.planet || '';
+                const server = row.dataset.server || '';
+
+                const statusMatch = !statusFilter || status === statusFilter;
+                const planetMatch = !planetFilter || planet === planetFilter;
+                const serverMatch = !serverFilter || server === serverFilter;
+
+                row.style.display = (statusMatch && planetMatch && serverMatch) ? '' : 'none';
+            });
+        }
+
+        // Remove duplicate planet options
+        const planetSelect = document.getElementById('filterPlanet');
+        if (planetSelect) {
+            const seen = new Set();
+            Array.from(planetSelect.options).forEach(option => {
+                if (option.value && seen.has(option.value)) {
+                    option.remove();
+                } else {
+                    seen.add(option.value);
+                }
+            });
+        }
+
+        // Add filter event listeners
+        document.getElementById('filterStatus')?.addEventListener('change', filterTaskHistory);
+        document.getElementById('filterPlanet')?.addEventListener('change', filterTaskHistory);
+        document.getElementById('filterServer')?.addEventListener('change', filterTaskHistory);
     </script>
 </body>
 
