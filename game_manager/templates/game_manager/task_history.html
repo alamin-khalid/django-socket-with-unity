@@ -392,12 +392,13 @@
                             <th>Started</th>
                             <th>Ended</th>
                             <th>Duration</th>
+                            <th>Gap</th>
                             <th>Error</th>
                         </tr>
                     </thead>
                     <tbody id="taskTableBody">
                         <tr>
-                            <td colspan="7" class="no-data">Loading...</td>
+                            <td colspan="8" class="no-data">Loading...</td>
                         </tr>
                     </tbody>
                 </table>
@@ -545,6 +546,45 @@
             }
         }
 
+        // Calculate gap between consecutive completed jobs for same planet
+        function calculateGaps(tasks) {
+            // Group completed tasks by planet
+            const planetLastComplete = {};
+
+            // Sort all tasks by end_time descending (newest first) to find previous completed job
+            const sortedByTime = [...allTasks]
+                .filter(t => t.status === 'completed' && t.end_time)
+                .sort((a, b) => new Date(b.end_time) - new Date(a.end_time));
+
+            // Build lookup of gaps
+            const gaps = {};
+            const planetCompleteTimes = {};
+
+            sortedByTime.forEach(task => {
+                const key = task.planet_id;
+                if (planetCompleteTimes[key]) {
+                    // Gap = previous completed end_time - this task's end_time
+                    const prevTime = new Date(planetCompleteTimes[key]);
+                    const thisTime = new Date(task.end_time);
+                    const gapSeconds = Math.floor((prevTime - thisTime) / 1000);
+                    gaps[`${task.planet_id}_${task.start_time}`] = gapSeconds;
+                }
+                planetCompleteTimes[key] = task.end_time;
+            });
+
+            return gaps;
+        }
+
+        // Format gap time
+        function formatGap(seconds) {
+            if (seconds === undefined || seconds === null) return '-';
+            if (seconds < 60) return `${seconds}s`;
+            if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+            const hours = Math.floor(seconds / 3600);
+            const mins = Math.floor((seconds % 3600) / 60);
+            return `${hours}h ${mins}m`;
+        }
+
         // Render table with current page data
         function renderTable() {
             let tasksToShow;
@@ -560,7 +600,7 @@
             if (tasksToShow.length === 0) {
                 taskTableBody.innerHTML = `
                     <tr>
-                        <td colspan="7" class="no-data">
+                        <td colspan="8" class="no-data">
                             ${searchQuery ? 'No tasks match your search' : 'No task history available'}
                         </td>
                     </tr>
@@ -568,7 +608,15 @@
                 return;
             }
 
-            taskTableBody.innerHTML = tasksToShow.map(task => `
+            // Calculate gaps for all tasks
+            const gaps = calculateGaps(allTasks);
+
+            taskTableBody.innerHTML = tasksToShow.map(task => {
+                const gapKey = `${task.planet_id}_${task.start_time}`;
+                const gapSeconds = gaps[gapKey];
+                const gapDisplay = task.status === 'completed' ? formatGap(gapSeconds) : '<span class="text-muted">-</span>';
+
+                return `
                 <tr>
                     <td><strong>${highlightMatch(task.planet_id, searchQuery)}</strong></td>
                     <td>${task.server_id ? highlightMatch(task.server_id, searchQuery) : '<span class="text-muted">Unknown</span>'}</td>
@@ -581,9 +629,10 @@
                         ${task.end_time ? `<span class="timestamp">${formatDate(task.end_time)}</span>` : '<span class="text-muted">-</span>'}
                     </td>
                     <td>${task.duration_seconds ? task.duration_seconds.toFixed(2) + 's' : '<span class="text-muted">-</span>'}</td>
+                    <td>${gapDisplay}</td>
                     <td class="error-cell text-muted" title="${escapeHtml(task.error_message || '')}">${task.error_message ? highlightMatch(task.error_message, searchQuery) : '-'}</td>
                 </tr>
-            `).join('');
+            `}).join('');
         }
 
         // Render pagination controls
