@@ -437,15 +437,15 @@ class DashboardView(View):
             status='completed'
         ).order_by('next_round_time')[:20]
         
-        # --- Task History with Optimization ---
+        # --- Task History with Optimization (exclude skipped) ---
         recent_tasks = TaskHistory.objects.select_related(
             'planet', 'server'
-        ).order_by('-start_time')[:50]
+        ).exclude(status='skipped').order_by('-start_time')[:50]
         
 
         
-        # --- Aggregate Statistics ---
-        total_tasks = TaskHistory.objects.count()
+        # --- Aggregate Statistics (exclude skipped from all calculations) ---
+        total_tasks = TaskHistory.objects.exclude(status='skipped').count()
         completed_tasks = TaskHistory.objects.filter(status='completed').count()
         failed_tasks = TaskHistory.objects.filter(status='failed').count()
         timeout_tasks = TaskHistory.objects.filter(status='timeout').count()
@@ -525,10 +525,10 @@ class TaskHistoryView(View):
         import json
         from .templatetags.dashboard_filters import mask_server_ip
         
-        # Fetch all tasks with related data
+        # Fetch all tasks with related data (exclude skipped)
         tasks = TaskHistory.objects.select_related(
             'planet', 'server'
-        ).order_by('-start_time')
+        ).exclude(status='skipped').order_by('-start_time')
         
         # Convert to JSON-serializable format with masked server IDs
         tasks_data = []
