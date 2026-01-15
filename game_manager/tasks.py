@@ -114,7 +114,7 @@ def assign_job_to_server(planet_id: str, server_id: int) -> bool:
         planet_obj = Planet.objects.get(planet_id=planet_id)
         server = UnityServer.objects.get(id=server_id)
         
-        ttprint(f"[Task] 📤 Assigning planet {planet_id} to server {server.server_id}")
+        tprint(f"[Task] 📤 Assigning planet {planet_id} to server {server.server_id}")
         
         # --- State Transition: Planet ---
         # queued -> processing
