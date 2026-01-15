@@ -58,9 +58,11 @@ import logging
 
 from .models import UnityServer, Planet, TaskHistory
 
-logger = logging.getLogger(__name__)
-
-
+# Helper for timestamped print
+def tprint(msg):
+    """Print with timestamp for debugging."""
+    from datetime import datetime
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
 class ServerConsumer(AsyncJsonWebsocketConsumer):
     """
     WebSocket consumer handling bidirectional communication with Unity servers.
@@ -114,6 +116,8 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         # Accept the WebSocket connection
         await self.accept()
         
+        tprint(f"[WS] 🔌 Server {self.server_id} CONNECTED")
+        
         # Create or update server record in database
         await self.register_server()
         
@@ -135,7 +139,7 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         Args:
             close_code: WebSocket close code (1000 = normal, others = error)
         """
-        logger.info(f"[WebSocket] Server {self.server_id} disconnecting (code: {close_code})")
+        tprint(f"[WS] 🔴 Server {self.server_id} DISCONNECTED (code: {close_code})")
         
         # Mark offline and recover orphaned jobs
         await self.mark_server_offline()
@@ -215,22 +219,35 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
             })
             
         elif message_type == 'status_update':
+            status = content.get('status', 'unknown')
+            tprint(f"[WS] 🟢 Status update from {self.server_id}: {status}")
             await self._handle_status_update_with_assignment(content)
             
         elif message_type == 'job_done':
+            planet_id = content.get('planet_id', 'unknown')
+            tprint(f"[WS] ✅ Job done received from {self.server_id} for planet {planet_id}")
             await self.handle_job_done(content)
             # NOTE: Don't trigger assignment here!
             # Unity sends status_update:idle afterward which triggers it.
             # Calling here + there causes duplicate assignments.
             
         elif message_type == 'error':
+            planet_id = content.get('planet_id', 'unknown')
+            error = content.get('error', 'unknown')
+            tprint(f"[WS] ❌ Error from {self.server_id}: Planet {planet_id} - {error}")
             await self.handle_error(content)
             
+        elif message_type == 'job_skipped':
+            planet_id = content.get('planet_id', 'unknown')
+            tprint(f"[WS] ⏩ Job skipped from {self.server_id} for planet {planet_id}")
+            await self.handle_job_skipped(content)
+            
         elif message_type == 'disconnect':
+            tprint(f"[WS] 👋 Disconnect received from {self.server_id}")
             await self.handle_disconnect(content)
             
         else:
-            logger.warning(f"[WebSocket] Unknown message type: {message_type}")
+            tprint(f"[WS] ❓ Unknown message type '{message_type}' from {self.server_id}")
 
     # =========================================================================
     # INCOMING MESSAGE HANDLERS

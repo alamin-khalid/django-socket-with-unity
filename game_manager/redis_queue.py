@@ -69,6 +69,11 @@ REDIS_DB: int = getattr(settings, 'REDIS_DB', 0)
 # Queue key in Redis - all planet scheduling data lives here
 QUEUE_KEY: str = 'planet_round_queue'
 
+# Helper for timestamped print
+def tprint(msg):
+    """Print with timestamp for debugging."""
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+
 
 # =============================================================================
 # CONNECTION MANAGEMENT
@@ -151,11 +156,11 @@ def add_planet_to_queue(planet_id: str, next_round_time: datetime) -> bool:
         score = next_round_time.timestamp()
         client.zadd(QUEUE_KEY, {planet_id: score})
         
-        logger.info(f"[Queue] Added planet {planet_id} for {next_round_time}")
+        tprint(f"[Redis] ➕ Added planet {planet_id} to queue, due: {next_round_time}")
         return True
         
     except RedisError as e:
-        logger.error(f"Failed to queue planet {planet_id}: {e}")
+        tprint(f"[Redis] ❌ Error adding planet {planet_id}: {e}")
         return False
 
 

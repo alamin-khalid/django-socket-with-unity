@@ -45,7 +45,11 @@ from asgiref.sync import async_to_sync
 # Celery task logger - outputs to Celery worker logs
 logger = get_task_logger(__name__)
 
-
+# Helper for timestamped print
+def tprint(msg):
+    """Print with timestamp for debugging."""
+    from datetime import datetime
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
 # =============================================================================
 # SCHEDULING TASKS
 # =============================================================================
@@ -112,7 +116,7 @@ def assign_job_to_server(planet_id: str, server_id: int) -> bool:
         planet_obj = Planet.objects.get(planet_id=planet_id)
         server = UnityServer.objects.get(id=server_id)
         
-        logger.info(f"Assigning planet {planet_id} to server {server.server_id}")
+        ttprint(f"[Task] 📤 Assigning planet {planet_id} to server {server.server_id}")
         
         # --- State Transition: Planet ---
         # queued -> processing
@@ -172,17 +176,17 @@ def assign_job_to_server(planet_id: str, server_id: int) -> bool:
             }
         )
         
-        logger.info(f"Job assigned: {planet_id} → {server.server_id}")
+        tprint(f"[Task] ✅ Job sent to {server.server_id} via WebSocket")
         return True
         
     except Planet.DoesNotExist:
-        logger.error(f"Planet {planet_id} not found")
+        tprint(f"[Task] ❌ Planet {planet_id} not found")
         return False
     except UnityServer.DoesNotExist:
-        logger.error(f"Server with ID {server_id} not found")
+        tprint(f"[Task] ❌ Server ID {server_id} not found")
         return False
     except Exception as e:
-        logger.error(f"Job assignment failed: {e}")
+        tprint(f"[Task] ❌ Error assigning job: {e}")
         return False
 
 
@@ -236,7 +240,7 @@ def handle_job_completion(
         planet_obj = Planet.objects.get(planet_id=planet_id)
         server = UnityServer.objects.get(server_id=server_id)
         
-        logger.info(f"Processing job completion: {planet_id} from {server_id}")
+        tprint(f"[Task] 🎉 Job COMPLETE received - Planet {planet_id} from {server_id}")
         
         # --- Parse Next Round Time ---
         next_round_time = parser.isoparse(next_round_time_str)
@@ -309,17 +313,17 @@ def handle_job_completion(
         # --- Requeue for Next Round ---
         add_planet_to_queue(planet_obj.planet_id, next_round_time)
         
-        logger.info(f"Planet {planet_id} completed, round {planet_obj.round_id}, next at {next_round_time}")
+        tprint(f"[Task] 🔄 Planet {planet_id} requeued for {next_round_time}")
         return f"Planet {planet_id} completed and requeued for {next_round_time}"
         
     except Planet.DoesNotExist:
-        logger.error(f"Planet {planet_id} not found during completion")
+        tprint(f"[Task] ❌ Planet {planet_id} not found in completion handler")
         return False
     except UnityServer.DoesNotExist:
-        logger.error(f"Server {server_id} not found during completion")
+        tprint(f"[Task] ❌ Server {server_id} not found in completion handler")
         return False
     except Exception as e:
-        logger.error(f"Job completion handling failed: {e}")
+        tprint(f"[Task] ❌ Error in job completion: {e}")
         return False
 
 
