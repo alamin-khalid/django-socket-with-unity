@@ -4,7 +4,12 @@ Runs automatically when Django starts and checks queue every second.
 """
 import threading
 import time
+from datetime import datetime
 
+# Helper for timestamped print
+def tprint(msg):
+    """Print with timestamp for debugging."""
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
 
 _scheduler_running = False
 _scheduler_thread = None
@@ -39,7 +44,7 @@ def start_scheduler():
     _scheduler_running = True
     _scheduler_thread = threading.Thread(target=assignment_loop, daemon=True)
     _scheduler_thread.start()
-    print("[Scheduler] ✅ Background assignment scheduler started (checks every 2 seconds)")
+    tprint("[Scheduler] ✅ Background assignment scheduler started (checks every 2 seconds)")
 
 
 def stop_scheduler():
@@ -48,4 +53,4 @@ def stop_scheduler():
     """
     global _scheduler_running
     _scheduler_running = False
-    print("[Scheduler] Background assignment scheduler stopped")
+    tprint("[Scheduler] 🛑 Background assignment scheduler stopped")
