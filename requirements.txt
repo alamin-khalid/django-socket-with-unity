@@ -22,3 +22,9 @@ gunicorn>=23.0,<24.0
 
 # WebSocket client for testing
 websocket-client>=1.9,<2.0
+
+# PostgreSQL driver (for production)
+psycopg2-binary>=2.9,<3.0
+
+# Environment variable management
+python-decouple>=3.8,<4.0

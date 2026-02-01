@@ -11,7 +11,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 from pathlib import Path
-import os
+from decouple import config, Csv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -21,16 +21,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-$_8ek$_h*)%1nudu#eygr!9khj3=g2kr!^3@6m$%%l9hgz2b@a')
+SECRET_KEY = config('DJANGO_SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
+DEBUG = config('DJANGO_DEBUG', cast=bool)
 
-ALLOWED_HOSTS = [
-    "103.12.214.243",
-    "127.0.0.1",
-    "localhost",
-]
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', cast=Csv())
 
 
 # Application definition
@@ -78,30 +74,23 @@ TEMPLATES = [
 WSGI_APPLICATION = 'server_orchestrator.wsgi.application'
 ASGI_APPLICATION = 'server_orchestrator.asgi.application'
 
+# Redis Configuration
+REDIS_HOST = config('REDIS_HOST')
+REDIS_PORT = config('REDIS_PORT', cast=int)
+REDIS_DB = config('REDIS_DB', default=0, cast=int)
+
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [(os.environ.get('REDIS_HOST', '127.0.0.1'), int(os.environ.get('REDIS_PORT', 16379)))],
+            "hosts": [(REDIS_HOST, REDIS_PORT)],
         },
     },
 }
 
-# Redis Configuration
-REDIS_HOST = os.environ.get('REDIS_HOST', '127.0.0.1')
-REDIS_PORT = int(os.environ.get('REDIS_PORT', 16379))
-REDIS_DB = int(os.environ.get('REDIS_DB', 0))
-
 # Celery Configuration
-# Use Redis as message broker (same Redis instance as channel layer)
-CELERY_BROKER_URL = os.environ.get(
-    'CELERY_BROKER_URL', 
-    f"redis://{REDIS_HOST}:{REDIS_PORT}/1"  # Use DB 1 to separate from channel layer
-)
-CELERY_RESULT_BACKEND = os.environ.get(
-    'CELERY_RESULT_BACKEND',
-    f"redis://{REDIS_HOST}:{REDIS_PORT}/2"  # Use DB 2 for results
-)
+CELERY_BROKER_URL = config('CELERY_BROKER_URL', default=f"redis://{REDIS_HOST}:{REDIS_PORT}/1")
+CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default=f"redis://{REDIS_HOST}:{REDIS_PORT}/2")
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
@@ -110,16 +99,16 @@ CELERY_TIMEZONE = 'UTC'
 # Task execution mode:
 # - True (default for dev): Tasks run synchronously, no worker needed
 # - False (production): Tasks run async via Celery worker
-CELERY_TASK_ALWAYS_EAGER = os.environ.get('CELERY_EAGER', 'True') == 'True'
+CELERY_TASK_ALWAYS_EAGER = config('CELERY_EAGER', cast=bool)
 
 CELERY_BEAT_SCHEDULE = {
     'process-due-planets': {
         'task': 'game_manager.tasks.process_due_planets',
-        'schedule': 5.0,  # Every 5 seconds
+        'schedule': 5.0,
     },
     'check-server-health': {
         'task': 'game_manager.tasks.check_server_health',
-        'schedule': 5.0,  # Every 5 seconds (for faster error recovery)
+        'schedule': 5.0,
     },
 }
 
@@ -133,15 +122,28 @@ REST_FRAMEWORK = {
 }
 
 
-# Database
-# https://docs.djangoproject.com/en/6.0/ref/settings/#databases
+# Database Configuration
+# Uses PostgreSQL in production (when DB_ENGINE is set), SQLite for local dev
+DB_ENGINE = config('DB_ENGINE', default='sqlite3')
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+if DB_ENGINE == 'postgresql':
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': config('DB_NAME'),
+            'USER': config('DB_USER'),
+            'PASSWORD': config('DB_PASSWORD'),
+            'HOST': config('DB_HOST'),
+            'PORT': config('DB_PORT'),
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 # Password validation
