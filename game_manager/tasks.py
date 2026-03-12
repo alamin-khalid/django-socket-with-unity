@@ -114,6 +114,26 @@ def assign_job_to_server(planet_id: str, server_id: int) -> bool:
         planet_obj = Planet.objects.get(planet_id=planet_id)
         server = UnityServer.objects.get(id=server_id)
         
+        # --- TIME GUARD: Last defense against Completed→Skipped cycle ---
+        # If next_round_time is still in the future, DON'T send the job.
+        # Requeue it and free the server.
+        if planet_obj.next_round_time and planet_obj.next_round_time > timezone.now():
+            time_remaining = (planet_obj.next_round_time - timezone.now()).total_seconds()
+            tprint(f"[Task] ⏩ BLOCKED: Planet {planet_id} not due yet ({time_remaining:.0f}s remaining)")
+            
+            # Reset planet to queued
+            planet_obj.status = 'queued'
+            planet_obj.processing_server = None
+            planet_obj.save(update_fields=['status', 'processing_server'])
+            
+            # Free the server
+            server.status = 'idle'
+            server.save(update_fields=['status'])
+            
+            # Ensure planet stays in Redis with correct time
+            add_planet_to_queue(planet_obj.planet_id, planet_obj.next_round_time)
+            return False
+        
         tprint(f"[Task] 📤 Assigning planet {planet_id} to server {server.server_id}")
         
         # --- State Transition: Planet ---
@@ -248,6 +268,53 @@ def handle_job_completion(
             from datetime import timezone as dt_timezone
             next_round_time = next_round_time.replace(tzinfo=dt_timezone.utc)
         
+        # --- VALIDATE: Reject stale/past next_round_time ---
+        # Unity sometimes sends a past time in job_done, which causes
+        # Django to immediately reassign → Unity skips → wasteful cycle.
+        # If the time is in the past, DON'T requeue. Wait for Unity to
+        # provide the correct future time via job_skipped or next job_done.
+        now = timezone.now()
+        if next_round_time <= now:
+            time_ago = (now - next_round_time).total_seconds()
+            tprint(f"[Task] ⚠️ Planet {planet_id} job_done has PAST next_round_time "
+                   f"({next_round_time_str}, {time_ago:.0f}s ago) - setting 5min cooldown")
+            
+            # Set a future cooldown so self-healing doesn't immediately re-add it
+            cooldown_time = now + timedelta(minutes=5)
+            
+            # Still update planet state and free server
+            planet_obj.status = 'queued'
+            if round_id is not None:
+                planet_obj.round_id = round_id
+            if current_round_number is not None:
+                planet_obj.current_round_number = current_round_number
+            if season_id is not None:
+                planet_obj.season_id = season_id
+            planet_obj.next_round_time = cooldown_time  # Future time prevents self-healing
+            planet_obj.last_processed = now
+            planet_obj.processing_server = None
+            planet_obj.error_retry_count = 0
+            planet_obj.save()
+            
+            server.current_task = None
+            server.total_completed_planet += 1
+            server.save()
+            
+            # Update TaskHistory
+            task_history = TaskHistory.objects.filter(
+                planet=planet_obj, server=server, status='started'
+            ).order_by('-start_time').first()
+            if task_history:
+                task_history.status = 'completed'
+                task_history.end_time = now
+                task_history.duration_seconds = (task_history.end_time - task_history.start_time).total_seconds()
+                task_history.save()
+            
+            # Add to Redis with future cooldown time
+            add_planet_to_queue(planet_obj.planet_id, cooldown_time)
+            
+            return f"Planet {planet_id} completed, past time detected, cooldown until {cooldown_time}"
+        
         # --- Update Planet State ---
         planet_obj.status = 'queued'
         
@@ -351,6 +418,7 @@ def check_server_health() -> str:
     )
     
     recovered_jobs = 0
+    stale_count = stale_servers.count()
     
     for server in stale_servers:
         
@@ -363,9 +431,8 @@ def check_server_health() -> str:
         server.status = 'offline'
         server.save(update_fields=['status'])
     
-    if stale_servers.exists():
-        count = stale_servers.count()
-        result = f"Marked {count} servers offline, recovered {recovered_jobs} jobs"
+    if stale_count > 0:
+        result = f"Marked {stale_count} servers offline, recovered {recovered_jobs} jobs"
     else:
         result = "All servers healthy"
     

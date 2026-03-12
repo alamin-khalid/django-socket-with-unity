@@ -317,10 +317,8 @@ def remove_planet_from_queue_on_delete(sender, instance, **kwargs) -> None:
     try:
         from .redis_queue import remove_from_queue
         remove_from_queue(instance.planet_id)
-    except Exception as e:
-        logging.getLogger(__name__).warning(
-            f"Could not remove {instance.planet_id} from queue: {e}"
-        )
+    except Exception:
+        pass  # Don't block deletion if Redis is unavailable
 
 
 class TaskHistory(models.Model):
@@ -363,6 +361,7 @@ class TaskHistory(models.Model):
         ('completed', 'Completed'),   # Success
         ('failed', 'Failed'),         # Error (may retry)
         ('timeout', 'Timeout'),       # Server went offline
+        ('skipped', 'Skipped'),       # Round time not yet reached
     ]
 
     # --- Relationships ---

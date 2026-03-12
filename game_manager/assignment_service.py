@@ -63,9 +63,15 @@ Last Modified: 2024-12
 """
 
 from typing import List
+from datetime import datetime
 
 from .models import UnityServer, Planet, TaskHistory
 from .redis_queue import get_due_planets, remove_from_queue
+
+# Helper for timestamped print
+def tprint(msg):
+    """Print with timestamp for debugging."""
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
 
 
 
@@ -114,9 +120,13 @@ def assign_available_planets() -> str:
     # =========================================================================
     if not due_planet_ids:
         due_planet_ids = _recover_missed_planets()
+        if due_planet_ids:
+            tprint(f"[Assign] ♻ Self-healing recovered {len(due_planet_ids)} planets: {due_planet_ids}")
     
     if not due_planet_ids:
         return "No due planets"
+    
+    tprint(f"[Assign] 📋 Due planets: {due_planet_ids}")
     
     # =========================================================================
     # STEP 3: Get available servers (load balanced)
@@ -156,8 +166,9 @@ def assign_available_planets() -> str:
             now = timezone.now()
             if planet_obj.next_round_time and planet_obj.next_round_time > now:
                 time_remaining = (planet_obj.next_round_time - now).total_seconds()
-                # Remove from Redis queue - it shouldn't be there if time hasn't come
-                remove_from_queue(planet_id)
+                tprint(f"[Assign] ⏩ Skipping planet {planet_id} - {time_remaining:.0f}s remaining")
+                # DON'T remove from Redis! Keep it with the correct future score
+                # so it gets picked up when the time actually arrives.
                 continue
             
             # Pop next idle server (least loaded)
@@ -177,6 +188,7 @@ def assign_available_planets() -> str:
             # Remove from Redis queue (prevent re-processing)
             remove_from_queue(planet_id)
             
+            tprint(f"[Assign] ✅ Planet {planet_id} → server {server.server_id}")
             assigned_count += 1
             
         except Planet.DoesNotExist:
@@ -185,8 +197,11 @@ def assign_available_planets() -> str:
             continue
             
         except Exception as e:
+            tprint(f"[Assign] ❌ Error assigning planet {planet_id}: {e}")
             continue
     
+    if assigned_count > 0:
+        tprint(f"[Assign] 📊 Assigned {assigned_count} planets")
     return f"Assigned {assigned_count} planets"
 
 

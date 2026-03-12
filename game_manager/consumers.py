@@ -330,7 +330,7 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
         # If server is now idle, wait briefly then look for work
         if data.get('status') == 'idle':
             # Wait for Celery to finish processing job_done before checking for new work
-            await asyncio.sleep(3)
+            await asyncio.sleep(5)
             await self.trigger_assignment()
 
     @database_sync_to_async
@@ -583,4 +583,4 @@ class ServerConsumer(AsyncJsonWebsocketConsumer):
             server.mark_disconnected()
             
         except Exception as e:
-            print(e)
+            tprint(f"[WS] ❌ Error marking server offline: {e}")
