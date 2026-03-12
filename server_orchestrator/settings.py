@@ -190,3 +190,6 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Allow large batch selections in admin (default is 1000)
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000
+
